@@ -1,0 +1,864 @@
+use axum::{
+  extract::{Path, Query, State},
+  http::{HeaderMap, HeaderName, Method, StatusCode, Uri},
+  response::{IntoResponse, Response},
+  routing::{any, get, post, put},
+  Json, Router,
+};
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use std::{
+  collections::HashMap,
+  collections::VecDeque,
+  path::{PathBuf},
+  sync::Arc,
+  time::{SystemTime, UNIX_EPOCH},
+};
+use tauri::Manager;
+use tokio::sync::Mutex;
+use tower_http::cors::{Any, CorsLayer};
+
+const DEFAULT_PROFILES_JSON: &str = include_str!("../../data/profiles.json");
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+struct Store {
+  #[serde(default)]
+  profiles: Vec<Profile>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+struct Profile {
+  name: String,
+  #[serde(default)]
+  base_url: String,
+  #[serde(default)]
+  params: Vec<String>,
+  #[serde(default)]
+  sub_profiles: Vec<SubProfile>,
+  #[serde(default)]
+  requests: Vec<RequestConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+struct SubProfile {
+  name: String,
+  #[serde(default)]
+  params: HashMap<String, String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+struct RequestConfig {
+  name: String,
+  path: String,
+  #[serde(default)]
+  method: String,
+  #[serde(default)]
+  headers: HashMap<String, String>,
+  #[serde(default)]
+  query_parameters: HashMap<String, String>,
+  #[serde(default)]
+  body: HashMap<String, String>,
+  #[serde(default)]
+  params: HashMap<String, String>,
+  #[serde(default)]
+  response: Option<ResponseConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+struct ResponseConfig {
+  #[serde(default)]
+  status: Option<u16>,
+  #[serde(default)]
+  headers: HashMap<String, String>,
+  #[serde(default)]
+  body: Option<Value>,
+}
+
+#[derive(Debug, Clone)]
+struct AppState {
+  data_file: Arc<PathBuf>,
+  write_lock: Arc<Mutex<()>>,
+  log_store: Arc<Mutex<LogStore>>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct RequestLogEntry {
+  timestamp_ms: u128,
+  method: String,
+  path: String,
+  query: HashMap<String, String>,
+  matched: bool,
+  profile: Option<String>,
+  sub_profile: Option<String>,
+  request: Option<String>,
+}
+
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
+struct MatchKey {
+  profile: String,
+  request: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RequestMatchCount {
+  profile: String,
+  request: String,
+  count: u64,
+}
+
+#[derive(Debug, Default)]
+struct LogStore {
+  entries: VecDeque<RequestLogEntry>,
+  counts: HashMap<MatchKey, u64>,
+}
+
+const MAX_LOG_ENTRIES: usize = 500;
+
+#[derive(Debug, Clone)]
+struct MatchResult {
+  profile: Profile,
+  sub_profile: SubProfile,
+  request: RequestConfig,
+  extracted_params: HashMap<String, String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateProfileInput {
+  name: String,
+  base_url: Option<String>,
+  params: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateProfileInput {
+  name: Option<String>,
+  base_url: Option<String>,
+  params: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateSubProfileInput {
+  name: String,
+  params: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateSubProfileInput {
+  name: Option<String>,
+  params: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateRequestInput {
+  name: String,
+  method: Option<String>,
+  path: String,
+  query_parameters: Option<HashMap<String, String>>,
+  headers: Option<HashMap<String, String>>,
+  body: Option<HashMap<String, String>>,
+  params: Option<HashMap<String, String>>,
+  response: Option<ResponseConfig>,
+}
+
+fn main() {
+  tauri::Builder::default()
+    .setup(|app| {
+      if cfg!(debug_assertions) {
+        if let Some(window) = app.get_webview_window("main") {
+          window.open_devtools();
+        }
+      }
+      let app_handle = app.handle().clone();
+      tauri::async_runtime::spawn(async move {
+        if let Err(error) = run_server(app_handle).await {
+          eprintln!("Server error: {error}");
+        }
+      });
+      Ok(())
+    })
+    .run(tauri::generate_context!())
+    .expect("error while running tauri application");
+}
+
+async fn run_server(app_handle: tauri::AppHandle) -> Result<(), String> {
+  let data_dir = app_handle
+    .path()
+    .app_data_dir()
+    .map_err(|error| error.to_string())?;
+  let data_file = data_dir.join("profiles.json");
+  ensure_data_file(&data_file).await?;
+
+  let state = AppState {
+    data_file: Arc::new(data_file),
+    write_lock: Arc::new(Mutex::new(())),
+    log_store: Arc::new(Mutex::new(LogStore::default())),
+  };
+
+  let cors = CorsLayer::new()
+    .allow_origin(Any)
+    .allow_methods([
+      Method::GET,
+      Method::POST,
+      Method::PUT,
+      Method::PATCH,
+      Method::DELETE,
+    ])
+    .allow_headers(Any);
+
+  let app = Router::new()
+    .route("/api/health", get(health))
+    .route("/api/profiles", get(list_profiles).post(create_profile))
+    .route(
+      "/api/profiles/:profile_name",
+      get(get_profile).put(update_profile),
+    )
+    .route(
+      "/api/profiles/:profile_name/subprofiles",
+      post(create_sub_profile),
+    )
+    .route(
+      "/api/profiles/:profile_name/subprofiles/:subprofile_name",
+      put(update_sub_profile),
+    )
+    .route(
+      "/api/profiles/:profile_name/requests",
+      post(create_request),
+    )
+    .route("/api/logs", get(get_logs))
+    .route("/api/request-counts", get(get_request_counts))
+    .route("/*path", any(proxy_handler))
+    .with_state(state)
+    .layer(cors);
+
+  let port = std::env::var("LOCAL_PROXY_PORT")
+    .ok()
+    .and_then(|value| value.parse::<u16>().ok())
+    .unwrap_or(3000);
+
+  let listener = tokio::net::TcpListener::bind(("127.0.0.1", port))
+    .await
+    .map_err(|error| error.to_string())?;
+
+  axum::serve(listener, app)
+    .await
+    .map_err(|error| error.to_string())
+}
+
+async fn ensure_data_file(path: &PathBuf) -> Result<(), String> {
+  if let Some(parent) = path.parent() {
+    tokio::fs::create_dir_all(parent)
+      .await
+      .map_err(|error| error.to_string())?;
+  }
+
+  if tokio::fs::metadata(path).await.is_ok() {
+    return Ok(());
+  }
+
+  tokio::fs::write(path, DEFAULT_PROFILES_JSON)
+    .await
+    .map_err(|error| error.to_string())
+}
+
+async fn read_store(state: &AppState) -> Store {
+  match tokio::fs::read_to_string(&*state.data_file).await {
+    Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
+    Err(_) => default_store(),
+  }
+}
+
+async fn write_store(state: &AppState, store: &Store) -> Result<(), String> {
+  let _guard = state.write_lock.lock().await;
+  if let Some(parent) = state.data_file.parent() {
+    tokio::fs::create_dir_all(parent)
+      .await
+      .map_err(|error| error.to_string())?;
+  }
+  let payload = serde_json::to_string_pretty(store).map_err(|error| error.to_string())?;
+  tokio::fs::write(&*state.data_file, payload)
+    .await
+    .map_err(|error| error.to_string())
+}
+
+fn default_store() -> Store {
+  serde_json::from_str(DEFAULT_PROFILES_JSON).unwrap_or_default()
+}
+
+async fn health() -> Json<Value> {
+  Json(json!({ "ok": true }))
+}
+
+async fn list_profiles(State(state): State<AppState>) -> Json<Vec<Profile>> {
+  let store = read_store(&state).await;
+  Json(store.profiles)
+}
+
+async fn get_logs(State(state): State<AppState>) -> Json<Vec<RequestLogEntry>> {
+  let log_store = state.log_store.lock().await;
+  Json(log_store.entries.iter().cloned().collect())
+}
+
+async fn get_request_counts(State(state): State<AppState>) -> Json<Vec<RequestMatchCount>> {
+  let log_store = state.log_store.lock().await;
+  let payload = log_store
+    .counts
+    .iter()
+    .map(|(key, count)| RequestMatchCount {
+      profile: key.profile.clone(),
+      request: key.request.clone(),
+      count: *count,
+    })
+    .collect();
+  Json(payload)
+}
+
+async fn get_profile(
+  State(state): State<AppState>,
+  Path(profile_name): Path<String>,
+) -> Response {
+  let store = read_store(&state).await;
+  match store.profiles.into_iter().find(|profile| profile.name == profile_name) {
+    Some(profile) => Json(profile).into_response(),
+    None => (StatusCode::NOT_FOUND, Json(json!({ "error": "Profile not found" }))).into_response(),
+  }
+}
+
+async fn create_profile(
+  State(state): State<AppState>,
+  Json(input): Json<CreateProfileInput>,
+) -> Response {
+  let mut store = read_store(&state).await;
+  if store.profiles.iter().any(|profile| profile.name == input.name) {
+    return (
+      StatusCode::CONFLICT,
+      Json(json!({ "error": "Profile already exists" })),
+    )
+      .into_response();
+  }
+
+  let profile = Profile {
+    name: input.name,
+    base_url: input.base_url.unwrap_or_default(),
+    params: input.params.unwrap_or_default(),
+    sub_profiles: Vec::new(),
+    requests: Vec::new(),
+  };
+  store.profiles.push(profile.clone());
+
+  if let Err(error) = write_store(&state, &store).await {
+    return (
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(json!({ "error": error })),
+    )
+      .into_response();
+  }
+
+  (StatusCode::CREATED, Json(profile)).into_response()
+}
+
+async fn update_profile(
+  State(state): State<AppState>,
+  Path(profile_name): Path<String>,
+  Json(input): Json<UpdateProfileInput>,
+) -> Response {
+  let mut store = read_store(&state).await;
+  if let Some(next_name) = input.name.clone() {
+    if next_name.is_empty() {
+      return (
+        StatusCode::BAD_REQUEST,
+        Json(json!({ "error": "Profile name cannot be empty" })),
+      )
+        .into_response();
+    }
+
+    if next_name != profile_name
+      && store.profiles.iter().any(|item| item.name == next_name)
+    {
+      return (
+        StatusCode::CONFLICT,
+        Json(json!({ "error": "Profile already exists" })),
+      )
+        .into_response();
+    }
+  }
+
+  let updated_profile = {
+    let Some(profile) = store
+      .profiles
+      .iter_mut()
+      .find(|profile| profile.name == profile_name)
+    else {
+      return (StatusCode::NOT_FOUND, Json(json!({ "error": "Profile not found" })))
+        .into_response();
+    };
+
+    if let Some(next_name) = input.name {
+      profile.name = next_name;
+    }
+
+    if let Some(base_url) = input.base_url {
+      profile.base_url = base_url;
+    }
+
+    if let Some(params) = input.params {
+      profile.params = params;
+    }
+
+    profile.clone()
+  };
+
+  if let Err(error) = write_store(&state, &store).await {
+    return (
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(json!({ "error": error })),
+    )
+      .into_response();
+  }
+
+  Json(updated_profile).into_response()
+}
+
+async fn create_sub_profile(
+  State(state): State<AppState>,
+  Path(profile_name): Path<String>,
+  Json(input): Json<CreateSubProfileInput>,
+) -> Response {
+  let mut store = read_store(&state).await;
+  let Some(profile) = store
+    .profiles
+    .iter_mut()
+    .find(|profile| profile.name == profile_name)
+  else {
+    return (StatusCode::NOT_FOUND, Json(json!({ "error": "Profile not found" })))
+      .into_response();
+  };
+
+  if profile.sub_profiles.iter().any(|sub| sub.name == input.name) {
+    return (
+      StatusCode::CONFLICT,
+      Json(json!({ "error": "SubProfile already exists" })),
+    )
+      .into_response();
+  }
+
+  let sub_profile = SubProfile {
+    name: input.name,
+    params: input.params.unwrap_or_default(),
+  };
+  profile.sub_profiles.push(sub_profile.clone());
+
+  if let Err(error) = write_store(&state, &store).await {
+    return (
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(json!({ "error": error })),
+    )
+      .into_response();
+  }
+
+  (StatusCode::CREATED, Json(sub_profile)).into_response()
+}
+
+async fn update_sub_profile(
+  State(state): State<AppState>,
+  Path((profile_name, subprofile_name)): Path<(String, String)>,
+  Json(input): Json<UpdateSubProfileInput>,
+) -> Response {
+  let mut store = read_store(&state).await;
+
+  let Some(profile) = store
+    .profiles
+    .iter()
+    .find(|profile| profile.name == profile_name)
+  else {
+    return (StatusCode::NOT_FOUND, Json(json!({ "error": "Profile not found" })))
+      .into_response();
+  };
+
+  if let Some(next_name) = input.name.clone() {
+    if next_name.is_empty() {
+      return (
+        StatusCode::BAD_REQUEST,
+        Json(json!({ "error": "SubProfile name cannot be empty" })),
+      )
+        .into_response();
+    }
+
+    if next_name != subprofile_name
+      && profile
+        .sub_profiles
+        .iter()
+        .any(|sub| sub.name == next_name)
+    {
+      return (
+        StatusCode::CONFLICT,
+        Json(json!({ "error": "SubProfile already exists" })),
+      )
+        .into_response();
+    }
+  }
+
+  let updated_subprofile = {
+    let Some(profile) = store
+      .profiles
+      .iter_mut()
+      .find(|profile| profile.name == profile_name)
+    else {
+      return (StatusCode::NOT_FOUND, Json(json!({ "error": "Profile not found" })))
+        .into_response();
+    };
+
+    let Some(sub_profile) = profile
+      .sub_profiles
+      .iter_mut()
+      .find(|sub| sub.name == subprofile_name)
+    else {
+      return (
+        StatusCode::NOT_FOUND,
+        Json(json!({ "error": "SubProfile not found" })),
+      )
+        .into_response();
+    };
+
+    if let Some(next_name) = input.name {
+      sub_profile.name = next_name;
+    }
+
+    if let Some(params) = input.params {
+      sub_profile.params = params;
+    }
+
+    sub_profile.clone()
+  };
+
+  if let Err(error) = write_store(&state, &store).await {
+    return (
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(json!({ "error": error })),
+    )
+      .into_response();
+  }
+
+  Json(updated_subprofile).into_response()
+}
+
+async fn create_request(
+  State(state): State<AppState>,
+  Path(profile_name): Path<String>,
+  Json(input): Json<CreateRequestInput>,
+) -> Response {
+  let mut store = read_store(&state).await;
+  let Some(profile) = store
+    .profiles
+    .iter_mut()
+    .find(|profile| profile.name == profile_name)
+  else {
+    return (StatusCode::NOT_FOUND, Json(json!({ "error": "Profile not found" })))
+      .into_response();
+  };
+
+  if profile.requests.iter().any(|request| request.name == input.name) {
+    return (
+      StatusCode::CONFLICT,
+      Json(json!({ "error": "Request already exists" })),
+    )
+      .into_response();
+  }
+
+  let request = RequestConfig {
+    name: input.name,
+    method: input.method.unwrap_or_else(|| "GET".to_string()).to_uppercase(),
+    path: input.path,
+    query_parameters: input.query_parameters.unwrap_or_default(),
+    headers: input.headers.unwrap_or_default(),
+    body: input.body.unwrap_or_default(),
+    params: input.params.unwrap_or_default(),
+    response: input.response,
+  };
+  profile.requests.push(request.clone());
+
+  if let Err(error) = write_store(&state, &store).await {
+    return (
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(json!({ "error": error })),
+    )
+      .into_response();
+  }
+
+  (StatusCode::CREATED, Json(request)).into_response()
+}
+
+async fn proxy_handler(
+  State(state): State<AppState>,
+  method: Method,
+  uri: Uri,
+  headers: HeaderMap,
+  Query(query): Query<HashMap<String, String>>,
+) -> Response {
+  let store = read_store(&state).await;
+  let path = uri.path().to_string();
+  let match_result = find_match(&store, &method, &path, &headers, &query);
+  record_request(&state, &method, &path, &query, match_result.as_ref()).await;
+
+  match match_result {
+    Some(found) => build_response(found, &path, &query),
+    None => (
+      StatusCode::NOT_FOUND,
+      Json(json!({
+        "error": "No matching profile/request found",
+        "path": path,
+        "method": method.to_string()
+      })),
+    )
+      .into_response(),
+  }
+}
+
+async fn record_request(
+  state: &AppState,
+  method: &Method,
+  path: &str,
+  query: &HashMap<String, String>,
+  match_result: Option<&MatchResult>,
+) {
+  let timestamp_ms = SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .map(|value| value.as_millis())
+    .unwrap_or_default();
+
+  let (profile, sub_profile, request) = match match_result {
+    Some(found) => (
+      Some(found.profile.name.clone()),
+      Some(found.sub_profile.name.clone()),
+      Some(found.request.name.clone()),
+    ),
+    None => (None, None, None),
+  };
+
+  let entry = RequestLogEntry {
+    timestamp_ms,
+    method: method.as_str().to_string(),
+    path: path.to_string(),
+    query: query.clone(),
+    matched: match_result.is_some(),
+    profile: profile.clone(),
+    sub_profile,
+    request: request.clone(),
+  };
+
+  let mut log_store = state.log_store.lock().await;
+  log_store.entries.push_back(entry);
+  if log_store.entries.len() > MAX_LOG_ENTRIES {
+    log_store.entries.pop_front();
+  }
+
+  if let (Some(profile), Some(request)) = (profile, request) {
+    let key = MatchKey { profile, request };
+    *log_store.counts.entry(key).or_insert(0) += 1;
+  }
+}
+
+fn find_match(
+  store: &Store,
+  method: &Method,
+  path: &str,
+  headers: &HeaderMap,
+  query: &HashMap<String, String>,
+) -> Option<MatchResult> {
+  for profile in &store.profiles {
+    for sub_profile in &profile.sub_profiles {
+      for request in &profile.requests {
+        if !method_matches(request, method) {
+          continue;
+        }
+
+        if !headers_match(&request.headers, headers) {
+          continue;
+        }
+
+        if !query_match(&request.query_parameters, query) {
+          continue;
+        }
+
+        let mut params = sub_profile.params.clone();
+        params.extend(request.params.clone());
+
+        let template = build_request_path(profile, request);
+        let (regex, tokens) = compile_path_matcher(&template, &params);
+        if let Some(captures) = regex.captures(path) {
+          let extracted = extract_params(&tokens, &captures);
+          return Some(MatchResult {
+            profile: profile.clone(),
+            sub_profile: sub_profile.clone(),
+            request: request.clone(),
+            extracted_params: extracted,
+          });
+        }
+      }
+    }
+  }
+
+  None
+}
+
+fn method_matches(request: &RequestConfig, method: &Method) -> bool {
+  if request.method.is_empty() || request.method == "*" {
+    return true;
+  }
+  request.method.to_uppercase() == method.as_str()
+}
+
+fn headers_match(expected: &HashMap<String, String>, actual: &HeaderMap) -> bool {
+  expected.iter().all(|(key, value)| {
+    let header_value = actual
+      .get(key.as_str())
+      .and_then(|value| value.to_str().ok());
+    header_value.map(|actual| actual == value).unwrap_or(false)
+  })
+}
+
+fn query_match(expected: &HashMap<String, String>, actual: &HashMap<String, String>) -> bool {
+  expected
+    .iter()
+    .all(|(key, value)| actual.get(key).map(|actual| actual == value).unwrap_or(false))
+}
+
+fn build_request_path(profile: &Profile, request: &RequestConfig) -> String {
+  let base = normalize_path(&profile.base_url);
+  let path = normalize_path(&request.path);
+  if profile.base_url.is_empty() {
+    return path;
+  }
+  if base.ends_with('/') && path.starts_with('/') {
+    format!("{}{}", base.trim_end_matches('/'), path)
+  } else {
+    format!("{}{}", base, path)
+  }
+}
+
+fn normalize_path(value: &str) -> String {
+  if value.is_empty() {
+    "/".to_string()
+  } else if value.starts_with('/') {
+    value.to_string()
+  } else {
+    format!("/{}", value)
+  }
+}
+
+#[derive(Debug)]
+struct ParamToken {
+  name: String,
+  value: Option<String>,
+  capture: bool,
+}
+
+fn compile_path_matcher(
+  template: &str,
+  param_values: &HashMap<String, String>,
+) -> (Regex, Vec<ParamToken>) {
+  let param_regex = Regex::new(r"\{([^}]+)\}").expect("invalid param regex");
+  let mut pattern = String::new();
+  let mut tokens = Vec::new();
+  let mut last_index = 0;
+
+  for capture in param_regex.captures_iter(template) {
+    let match_span = capture.get(0).expect("capture span");
+    pattern.push_str(&regex::escape(&template[last_index..match_span.start()]));
+
+    let name = capture
+      .get(1)
+      .expect("capture group")
+      .as_str()
+      .trim()
+      .to_string();
+
+    if let Some(value) = param_values.get(&name) {
+      pattern.push_str(&regex::escape(value));
+      tokens.push(ParamToken {
+        name,
+        value: Some(value.clone()),
+        capture: false,
+      });
+    } else {
+      pattern.push_str("([^/]+)");
+      tokens.push(ParamToken {
+        name,
+        value: None,
+        capture: true,
+      });
+    }
+
+    last_index = match_span.end();
+  }
+
+  pattern.push_str(&regex::escape(&template[last_index..]));
+  let regex = Regex::new(&format!("^{}$", pattern)).expect("invalid matcher regex");
+
+  (regex, tokens)
+}
+
+fn extract_params(tokens: &[ParamToken], captures: &regex::Captures) -> HashMap<String, String> {
+  let mut values = HashMap::new();
+  let mut capture_index = 1;
+
+  for token in tokens {
+    if let Some(value) = &token.value {
+      values.insert(token.name.clone(), value.clone());
+    } else if token.capture {
+      if let Some(value) = captures.get(capture_index) {
+        values.insert(token.name.clone(), value.as_str().to_string());
+      }
+      capture_index += 1;
+    }
+  }
+
+  values
+}
+
+fn build_response(
+  match_result: MatchResult,
+  path: &str,
+  query: &HashMap<String, String>,
+) -> Response {
+  let response_config = match_result.request.response.unwrap_or_default();
+  let status = response_config
+    .status
+    .and_then(|value| StatusCode::from_u16(value).ok())
+    .unwrap_or(StatusCode::OK);
+
+  let body = response_config.body.unwrap_or_else(|| {
+    json!({
+      "matched": {
+        "profile": match_result.profile.name,
+        "subProfile": match_result.sub_profile.name,
+        "request": match_result.request.name
+      },
+      "path": path,
+      "query": query,
+      "params": match_result.extracted_params
+    })
+  });
+
+  let mut response = Json(body).into_response();
+  *response.status_mut() = status;
+
+  for (key, value) in response_config.headers {
+    if let Ok(header_name) = HeaderName::from_bytes(key.as_bytes()) {
+      if let Ok(header_value) = value.parse() {
+        response.headers_mut().insert(header_name, header_value);
+      }
+    }
+  }
+
+  response
+}

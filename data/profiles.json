@@ -1,0 +1,40 @@
+{
+  "profiles": [
+    {
+      "name": "test",
+      "baseUrl": "",
+      "params": ["account_id", "customer_id"],
+      "subProfiles": [
+        {
+          "name": "SubTest",
+          "params": {
+            "account_id": "12312",
+            "customer_id": "9876"
+          }
+        }
+      ],
+      "requests": [
+        {
+          "name": "TestRequest",
+          "method": "GET",
+          "path": "/api/account/{account_id}/something/{customer_id}",
+          "queryParameters": {
+            "testParam": "true"
+          },
+          "headers": {},
+          "body": {},
+          "params": {},
+          "response": {
+            "status": 200,
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": {
+              "message": "Matched test request"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
