@@ -1,5 +1,7 @@
+import { useState } from "react";
 import ActivePanel from "./components/blocks/ActivePanel";
 import LibraryPanel from "./components/blocks/LibraryPanel";
+import DebugPanel from "./components/debug/DebugPanel";
 import Sidebar from "./components/layout/Sidebar";
 import BlockBuilderModal from "./components/modals/BlockBuilderModal";
 import CreateProfileModal from "./components/modals/CreateProfileModal";
@@ -13,12 +15,14 @@ import useProfiles from "./hooks/useProfiles";
 import useSubprofiles from "./hooks/useSubprofiles";
 
 const App = () => {
+  const [activeView, setActiveView] = useState<"builder" | "debug">("builder");
   const {
     profiles,
     setProfiles,
     selectedProfile,
     setSelectedProfile,
     profilesError,
+    activeProfileError,
     isLoadingProfiles,
     isSavingProfile,
     isUpdatingProfile,
@@ -123,32 +127,41 @@ const App = () => {
       <Sidebar
         profiles={profiles}
         selectedProfile={selectedProfile}
+        activeProfileError={activeProfileError}
+        activeView={activeView}
         onSelectProfile={setSelectedProfile}
+        onChangeView={setActiveView}
         onManageProfiles={() => setIsManageProfilesModalOpen(true)}
         onManageSubprofiles={() => setIsManageSubprofilesModalOpen(true)}
       />
 
-      <main className="main">
-        <LibraryPanel
-          blocks={libraryBlocks}
-          onCreateBlock={() => setIsBuilderOpen(true)}
-          onDragOver={allowDrop}
-          onDragEnter={handleDragEnter}
-          onDrop={handleDrop("library")}
-          onDragStart={(blockId) => handleDragStart(blockId, "library")}
-          onDragEnd={handleDragEnd}
-          onPointerDown={(blockId) => handlePointerDown(blockId, "library")}
-        />
-        <ActivePanel
-          blocks={activeBlocks}
-          onDragOver={allowDrop}
-          onDragEnter={handleDragEnter}
-          onDropActive={handleDrop("active")}
-          onDropLibrary={handleDrop("library")}
-          onDragStart={(blockId) => handleDragStart(blockId, "active")}
-          onDragEnd={handleDragEnd}
-          onPointerDown={(blockId) => handlePointerDown(blockId, "active")}
-        />
+      <main className={`main ${activeView === "debug" ? "main--single" : ""}`}>
+        {activeView === "debug" ? (
+          <DebugPanel />
+        ) : (
+          <>
+            <LibraryPanel
+              blocks={libraryBlocks}
+              onCreateBlock={() => setIsBuilderOpen(true)}
+              onDragOver={allowDrop}
+              onDragEnter={handleDragEnter}
+              onDrop={handleDrop("library")}
+              onDragStart={(blockId) => handleDragStart(blockId, "library")}
+              onDragEnd={handleDragEnd}
+              onPointerDown={(blockId) => handlePointerDown(blockId, "library")}
+            />
+            <ActivePanel
+              blocks={activeBlocks}
+              onDragOver={allowDrop}
+              onDragEnter={handleDragEnter}
+              onDropActive={handleDrop("active")}
+              onDropLibrary={handleDrop("library")}
+              onDragStart={(blockId) => handleDragStart(blockId, "active")}
+              onDragEnd={handleDragEnd}
+              onPointerDown={(blockId) => handlePointerDown(blockId, "active")}
+            />
+          </>
+        )}
       </main>
       <BlockBuilderModal
         isOpen={isBuilderOpen}

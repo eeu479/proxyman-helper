@@ -1,6 +1,7 @@
 use axum::{
+  body::{Body, Bytes},
   extract::{Path, Query, State},
-  http::{HeaderMap, HeaderName, Method, StatusCode, Uri},
+  http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, Uri},
   response::{IntoResponse, Response},
   routing::{any, get, post, put},
   Json, Router,
@@ -26,6 +27,8 @@ const DEFAULT_PROFILES_JSON: &str = include_str!("../../data/profiles.json");
 struct Store {
   #[serde(default)]
   profiles: Vec<Profile>,
+  #[serde(default)]
+  active_profile: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -40,6 +43,10 @@ struct Profile {
   sub_profiles: Vec<SubProfile>,
   #[serde(default)]
   requests: Vec<RequestConfig>,
+  #[serde(default)]
+  library_blocks: Vec<Block>,
+  #[serde(default)]
+  active_blocks: Vec<Block>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -70,6 +77,28 @@ struct RequestConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
+struct Block {
+  id: String,
+  name: String,
+  method: String,
+  #[serde(default)]
+  path: String,
+  description: String,
+  response_template: String,
+  #[serde(default)]
+  template_values: Vec<TemplateValue>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+struct TemplateValue {
+  id: String,
+  key: String,
+  value: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
 struct ResponseConfig {
   #[serde(default)]
   status: Option<u16>,
@@ -79,11 +108,22 @@ struct ResponseConfig {
   body: Option<Value>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+struct BlocksPayload {
+  #[serde(default)]
+  library_blocks: Vec<Block>,
+  #[serde(default)]
+  active_blocks: Vec<Block>,
+}
+
 #[derive(Debug, Clone)]
 struct AppState {
   data_file: Arc<PathBuf>,
   write_lock: Arc<Mutex<()>>,
   log_store: Arc<Mutex<LogStore>>,
+  active_profile: Arc<Mutex<Option<String>>>,
+  http_client: reqwest::Client,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -97,6 +137,7 @@ struct RequestLogEntry {
   profile: Option<String>,
   sub_profile: Option<String>,
   request: Option<String>,
+  block: Option<String>,
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
@@ -127,6 +168,12 @@ struct MatchResult {
   sub_profile: SubProfile,
   request: RequestConfig,
   extracted_params: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone)]
+struct BlockMatch {
+  profile: Profile,
+  block: Block,
 }
 
 #[derive(Debug, Deserialize)]
@@ -170,6 +217,18 @@ struct CreateRequestInput {
   response: Option<ResponseConfig>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ActiveProfileResponse {
+  name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SetActiveProfileInput {
+  name: String,
+}
+
 fn main() {
   tauri::Builder::default()
     .setup(|app| {
@@ -202,7 +261,11 @@ async fn run_server(app_handle: tauri::AppHandle) -> Result<(), String> {
     data_file: Arc::new(data_file),
     write_lock: Arc::new(Mutex::new(())),
     log_store: Arc::new(Mutex::new(LogStore::default())),
+    active_profile: Arc::new(Mutex::new(None)),
+    http_client: reqwest::Client::new(),
   };
+  let store = read_store(&state).await;
+  *state.active_profile.lock().await = store.active_profile.clone();
 
   let cors = CorsLayer::new()
     .allow_origin(Any)
@@ -234,6 +297,11 @@ async fn run_server(app_handle: tauri::AppHandle) -> Result<(), String> {
       "/api/profiles/:profile_name/requests",
       post(create_request),
     )
+    .route(
+      "/api/profiles/:profile_name/blocks",
+      get(get_blocks).put(update_blocks),
+    )
+    .route("/api/active-profile", get(get_active_profile).put(set_active_profile))
     .route("/api/logs", get(get_logs))
     .route("/api/request-counts", get(get_request_counts))
     .route("/*path", any(proxy_handler))
@@ -352,6 +420,8 @@ async fn create_profile(
     params: input.params.unwrap_or_default(),
     sub_profiles: Vec::new(),
     requests: Vec::new(),
+    library_blocks: Vec::new(),
+    active_blocks: Vec::new(),
   };
   store.profiles.push(profile.clone());
 
@@ -372,6 +442,7 @@ async fn update_profile(
   Json(input): Json<UpdateProfileInput>,
 ) -> Response {
   let mut store = read_store(&state).await;
+  let active_profile = state.active_profile.lock().await.clone();
   if let Some(next_name) = input.name.clone() {
     if next_name.is_empty() {
       return (
@@ -416,6 +487,11 @@ async fn update_profile(
 
     profile.clone()
   };
+
+  if active_profile.as_deref() == Some(profile_name.as_str()) {
+    store.active_profile = Some(updated_profile.name.clone());
+    *state.active_profile.lock().await = Some(updated_profile.name.clone());
+  }
 
   if let Err(error) = write_store(&state, &store).await {
     return (
@@ -597,29 +673,151 @@ async fn create_request(
   (StatusCode::CREATED, Json(request)).into_response()
 }
 
+async fn get_blocks(
+  State(state): State<AppState>,
+  Path(profile_name): Path<String>,
+) -> Response {
+  let store = read_store(&state).await;
+  let Some(profile) = store
+    .profiles
+    .into_iter()
+    .find(|profile| profile.name == profile_name)
+  else {
+    return (StatusCode::NOT_FOUND, Json(json!({ "error": "Profile not found" })))
+      .into_response();
+  };
+
+  Json(BlocksPayload {
+    library_blocks: profile.library_blocks,
+    active_blocks: profile.active_blocks,
+  })
+  .into_response()
+}
+
+async fn update_blocks(
+  State(state): State<AppState>,
+  Path(profile_name): Path<String>,
+  Json(input): Json<BlocksPayload>,
+) -> Response {
+  let mut store = read_store(&state).await;
+  let Some(profile) = store
+    .profiles
+    .iter_mut()
+    .find(|profile| profile.name == profile_name)
+  else {
+    return (StatusCode::NOT_FOUND, Json(json!({ "error": "Profile not found" })))
+      .into_response();
+  };
+
+  profile.library_blocks = input.library_blocks.clone();
+  profile.active_blocks = input.active_blocks.clone();
+
+  if let Err(error) = write_store(&state, &store).await {
+    return (
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(json!({ "error": error })),
+    )
+      .into_response();
+  }
+
+  Json(BlocksPayload {
+    library_blocks: input.library_blocks,
+    active_blocks: input.active_blocks,
+  })
+  .into_response()
+}
+
+async fn get_active_profile(State(state): State<AppState>) -> Json<ActiveProfileResponse> {
+  let active_profile = state.active_profile.lock().await.clone();
+  Json(ActiveProfileResponse {
+    name: active_profile,
+  })
+}
+
+async fn set_active_profile(
+  State(state): State<AppState>,
+  Json(input): Json<SetActiveProfileInput>,
+) -> Response {
+  let name = input.name.trim().to_string();
+  if name.is_empty() {
+    return (
+      StatusCode::BAD_REQUEST,
+      Json(json!({ "error": "Profile name cannot be empty" })),
+    )
+      .into_response();
+  }
+
+  let mut store = read_store(&state).await;
+  if !store.profiles.iter().any(|profile| profile.name == name) {
+    return (
+      StatusCode::NOT_FOUND,
+      Json(json!({ "error": "Profile not found" })),
+    )
+      .into_response();
+  }
+
+  *state.active_profile.lock().await = Some(name.clone());
+  store.active_profile = Some(name.clone());
+  if let Err(error) = write_store(&state, &store).await {
+    return (
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(json!({ "error": error })),
+    )
+      .into_response();
+  }
+  Json(ActiveProfileResponse {
+    name: Some(name),
+  })
+  .into_response()
+}
+
 async fn proxy_handler(
   State(state): State<AppState>,
   method: Method,
   uri: Uri,
   headers: HeaderMap,
   Query(query): Query<HashMap<String, String>>,
+  body: Bytes,
 ) -> Response {
   let store = read_store(&state).await;
   let path = uri.path().to_string();
-  let match_result = find_match(&store, &method, &path, &headers, &query);
-  record_request(&state, &method, &path, &query, match_result.as_ref()).await;
+  let active_profile = state.active_profile.lock().await.clone();
+  let block_match =
+    find_block_match(&store, active_profile.as_deref(), &method, &path);
+  if let Some(found) = block_match.clone() {
+    record_request(
+      &state,
+      &method,
+      &path,
+      &query,
+      None,
+      Some(&found),
+    )
+    .await;
+    return build_block_response(found);
+  }
+  let match_result = find_match(
+    &store,
+    &method,
+    &path,
+    &headers,
+    &query,
+    active_profile.as_deref(),
+  );
+  record_request(
+    &state,
+    &method,
+    &path,
+    &query,
+    match_result.as_ref(),
+    None,
+  )
+  .await;
 
   match match_result {
     Some(found) => build_response(found, &path, &query),
-    None => (
-      StatusCode::NOT_FOUND,
-      Json(json!({
-        "error": "No matching profile/request found",
-        "path": path,
-        "method": method.to_string()
-      })),
-    )
-      .into_response(),
+    None => proxy_request(&state, &store, active_profile.as_deref(), method, uri, headers, body)
+      .await,
   }
 }
 
@@ -629,19 +827,29 @@ async fn record_request(
   path: &str,
   query: &HashMap<String, String>,
   match_result: Option<&MatchResult>,
+  block_match: Option<&BlockMatch>,
 ) {
   let timestamp_ms = SystemTime::now()
     .duration_since(UNIX_EPOCH)
     .map(|value| value.as_millis())
     .unwrap_or_default();
 
-  let (profile, sub_profile, request) = match match_result {
-    Some(found) => (
+  let (profile, sub_profile, request, block, matched) = match (match_result, block_match) {
+    (Some(found), _) => (
       Some(found.profile.name.clone()),
       Some(found.sub_profile.name.clone()),
       Some(found.request.name.clone()),
+      None,
+      true,
     ),
-    None => (None, None, None),
+    (None, Some(found)) => (
+      Some(found.profile.name.clone()),
+      None,
+      None,
+      Some(found.block.name.clone()),
+      true,
+    ),
+    _ => (None, None, None, None, false),
   };
 
   let entry = RequestLogEntry {
@@ -649,10 +857,11 @@ async fn record_request(
     method: method.as_str().to_string(),
     path: path.to_string(),
     query: query.clone(),
-    matched: match_result.is_some(),
+    matched,
     profile: profile.clone(),
     sub_profile,
     request: request.clone(),
+    block,
   };
 
   let mut log_store = state.log_store.lock().await;
@@ -673,8 +882,13 @@ fn find_match(
   path: &str,
   headers: &HeaderMap,
   query: &HashMap<String, String>,
+  active_profile: Option<&str>,
 ) -> Option<MatchResult> {
+  let active_profile = active_profile?;
   for profile in &store.profiles {
+    if profile.name != active_profile {
+      continue;
+    }
     for sub_profile in &profile.sub_profiles {
       for request in &profile.requests {
         if !method_matches(request, method) {
@@ -710,6 +924,33 @@ fn find_match(
   None
 }
 
+fn find_block_match(
+  store: &Store,
+  active_profile: Option<&str>,
+  method: &Method,
+  path: &str,
+) -> Option<BlockMatch> {
+  let active_profile = active_profile?;
+  let profile = store
+    .profiles
+    .iter()
+    .find(|profile| profile.name == active_profile)?
+    .clone();
+  let matched = profile
+    .active_blocks
+    .iter()
+    .find(|block| {
+      let block_path = derive_block_path(block);
+      block_method_matches(block, method) && block_path.as_deref() == Some(path)
+    })
+    .cloned()?;
+
+  Some(BlockMatch {
+    profile,
+    block: matched,
+  })
+}
+
 fn method_matches(request: &RequestConfig, method: &Method) -> bool {
   if request.method.is_empty() || request.method == "*" {
     return true;
@@ -724,6 +965,26 @@ fn headers_match(expected: &HashMap<String, String>, actual: &HeaderMap) -> bool
       .and_then(|value| value.to_str().ok());
     header_value.map(|actual| actual == value).unwrap_or(false)
   })
+}
+
+fn block_method_matches(block: &Block, method: &Method) -> bool {
+  if block.method.is_empty() || block.method == "*" {
+    return true;
+  }
+  block.method.to_uppercase() == method.as_str()
+}
+
+fn derive_block_path(block: &Block) -> Option<String> {
+  if !block.path.is_empty() {
+    return Some(block.path.clone());
+  }
+  let trimmed = block.description.trim();
+  let (_, path) = trimmed.split_once(' ')?;
+  if path.starts_with('/') {
+    Some(path.to_string())
+  } else {
+    None
+  }
 }
 
 fn query_match(expected: &HashMap<String, String>, actual: &HashMap<String, String>) -> bool {
@@ -861,4 +1122,180 @@ fn build_response(
   }
 
   response
+}
+
+fn build_block_response(block_match: BlockMatch) -> Response {
+  let rendered = render_template(&block_match.block.response_template, &block_match.block.template_values);
+  if rendered.trim().is_empty() {
+    return StatusCode::OK.into_response();
+  }
+
+  if let Ok(value) = serde_json::from_str::<Value>(&rendered) {
+    return Json(value).into_response();
+  }
+
+  let mut response = Response::new(Body::from(rendered));
+  if let Ok(header_value) = HeaderValue::from_str("text/plain; charset=utf-8") {
+    response
+      .headers_mut()
+      .insert(HeaderName::from_static("content-type"), header_value);
+  }
+  response
+}
+
+fn render_template(template: &str, values: &[TemplateValue]) -> String {
+  let mut output = template.to_string();
+  for value in values {
+    if value.key.is_empty() {
+      continue;
+    }
+    let needle = format!("{{{{{}}}}}", value.key);
+    output = output.replace(&needle, &value.value);
+  }
+  output
+}
+
+async fn proxy_request(
+  state: &AppState,
+  store: &Store,
+  active_profile: Option<&str>,
+  method: Method,
+  uri: Uri,
+  headers: HeaderMap,
+  body: Bytes,
+) -> Response {
+  let profile = resolve_active_profile(store, active_profile);
+  let Some(profile) = profile else {
+    return (
+      StatusCode::NOT_FOUND,
+      Json(json!({ "error": "No active profile available for proxying" })),
+    )
+      .into_response();
+  };
+
+  if profile.base_url.trim().is_empty() {
+    return (
+      StatusCode::BAD_REQUEST,
+      Json(json!({ "error": "Active profile does not define a baseUrl" })),
+    )
+      .into_response();
+  }
+
+  let url = build_proxy_url(&profile.base_url, &uri);
+  let upstream_method = reqwest::Method::from_bytes(method.as_str().as_bytes())
+    .unwrap_or(reqwest::Method::GET);
+  let proxy_headers = build_proxy_request_headers(&headers);
+
+  let upstream = state
+    .http_client
+    .request(upstream_method, url)
+    .headers(proxy_headers)
+    .body(body)
+    .send()
+    .await;
+
+  let upstream = match upstream {
+    Ok(response) => response,
+    Err(error) => {
+      return (
+        StatusCode::BAD_GATEWAY,
+        Json(json!({ "error": format!("Proxy request failed: {error}") })),
+      )
+        .into_response()
+    }
+  };
+
+  let status = StatusCode::from_u16(upstream.status().as_u16())
+    .unwrap_or(StatusCode::BAD_GATEWAY);
+  let response_headers = filter_proxy_response_headers(upstream.headers());
+  let body_bytes = match upstream.bytes().await {
+    Ok(bytes) => bytes,
+    Err(error) => {
+      return (
+        StatusCode::BAD_GATEWAY,
+        Json(json!({ "error": format!("Unable to read proxy response: {error}") })),
+      )
+        .into_response()
+    }
+  };
+
+  let mut response = Response::new(Body::from(body_bytes));
+  *response.status_mut() = status;
+  *response.headers_mut() = response_headers;
+  response
+}
+
+fn resolve_active_profile(store: &Store, active_profile: Option<&str>) -> Option<Profile> {
+  if let Some(name) = active_profile {
+    if let Some(profile) = store.profiles.iter().find(|profile| profile.name == name) {
+      return Some(profile.clone());
+    }
+  }
+  store.profiles.first().cloned()
+}
+
+fn build_proxy_url(base_url: &str, uri: &Uri) -> String {
+  let base = base_url.trim_end_matches('/');
+  let path = uri.path();
+  let mut full = if path.starts_with('/') {
+    format!("{}{}", base, path)
+  } else {
+    format!("{}/{}", base, path)
+  };
+  if let Some(query) = uri.query() {
+    full.push('?');
+    full.push_str(query);
+  }
+  full
+}
+
+fn build_proxy_request_headers(headers: &HeaderMap) -> HeaderMap {
+  let mut next = HeaderMap::new();
+  for (name, value) in headers.iter() {
+    let key = name.as_str().to_ascii_lowercase();
+    if matches!(
+      key.as_str(),
+      "host"
+        | "content-length"
+        | "connection"
+        | "keep-alive"
+        | "proxy-authenticate"
+        | "proxy-authorization"
+        | "te"
+        | "trailers"
+        | "transfer-encoding"
+        | "upgrade"
+    ) {
+      continue;
+    }
+    next.append(name.clone(), value.clone());
+  }
+
+  next.insert(
+    HeaderName::from_bytes(b"x-bypass-proxyman").unwrap(),
+    HeaderValue::from_static("true"),
+  );
+  next
+}
+
+fn filter_proxy_response_headers(headers: &HeaderMap) -> HeaderMap {
+  let mut next = HeaderMap::new();
+  for (name, value) in headers.iter() {
+    let key = name.as_str().to_ascii_lowercase();
+    if matches!(
+      key.as_str(),
+      "connection"
+        | "keep-alive"
+        | "proxy-authenticate"
+        | "proxy-authorization"
+        | "te"
+        | "trailers"
+        | "transfer-encoding"
+        | "upgrade"
+    ) {
+      continue;
+    }
+    next.append(name.clone(), value.clone());
+  }
+  next
 }

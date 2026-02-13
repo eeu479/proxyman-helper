@@ -3,7 +3,10 @@ import type { Profile } from "../../types/profile";
 type SidebarProps = {
   profiles: Profile[];
   selectedProfile: string;
+  activeProfileError?: string;
+  activeView: "builder" | "debug";
   onSelectProfile: (profileId: string) => void;
+  onChangeView: (view: "builder" | "debug") => void;
   onManageProfiles: () => void;
   onManageSubprofiles: () => void;
 };
@@ -11,7 +14,10 @@ type SidebarProps = {
 const Sidebar = ({
   profiles,
   selectedProfile,
+  activeProfileError,
+  activeView,
   onSelectProfile,
+  onChangeView,
   onManageProfiles,
   onManageSubprofiles,
 }: SidebarProps) => {
@@ -48,6 +54,9 @@ const Sidebar = ({
             </option>
           ))}
         </select>
+        {activeProfileError ? (
+          <div className="settings__empty">{activeProfileError}</div>
+        ) : null}
       </div>
       <div className="sidebar__section">
         <div className="sidebar__section-header">
@@ -72,6 +81,27 @@ const Sidebar = ({
             <li className="sidebar__item">No subprofiles yet.</li>
           ) : null}
         </ul>
+      </div>
+      <div className="sidebar__section">
+        <div className="sidebar__section-header">
+          <h2 className="sidebar__title">Views</h2>
+        </div>
+        <div className="sidebar__nav">
+          <button
+            className={`sidebar__nav-button ${activeView === "builder" ? "is-active" : ""}`}
+            type="button"
+            onClick={() => onChangeView("builder")}
+          >
+            Builder
+          </button>
+          <button
+            className={`sidebar__nav-button ${activeView === "debug" ? "is-active" : ""}`}
+            type="button"
+            onClick={() => onChangeView("debug")}
+          >
+            Debug
+          </button>
+        </div>
       </div>
       <div className="sidebar__footer">
         <button className="sidebar__nav-button" type="button" onClick={onManageSubprofiles}>

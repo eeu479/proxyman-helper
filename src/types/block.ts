@@ -8,6 +8,7 @@ export type Block = {
   id: string;
   name: string;
   method: string;
+  path: string;
   description: string;
   responseTemplate: string;
   templateValues: TemplateValue[];

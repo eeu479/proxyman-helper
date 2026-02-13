@@ -1,5 +1,6 @@
 import type { DragEvent, FormEvent, PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { fetchBlocks, updateBlocks } from "../api/blocks";
 import { initialLibrary } from "../data/initialData";
 import type { Block } from "../types/block";
 import type { Profile } from "../types/profile";
@@ -25,7 +26,7 @@ type UseBlocksReturn = {
   setBuilderPath: (value: string) => void;
   setBuilderDescription: (value: string) => void;
   setBuilderResponseTemplate: (value: string) => void;
-  addTemplateValue: () => void;
+  addTemplateValue: (key?: string, value?: string) => void;
   updateTemplateValue: (id: string, field: "key" | "value", value: string) => void;
   removeTemplateValue: (id: string) => void;
   closeBuilder: () => void;
@@ -73,28 +74,101 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
       templateValues: [...block.templateValues],
     }));
 
+  const extractTemplateKeys = (template: string) => {
+    const regex = /\{\{\s*([^}]+?)\s*\}\}/g;
+    const keys = new Set<string>();
+    let match = regex.exec(template);
+    while (match) {
+      const key = match[1]?.trim();
+      if (key) {
+        keys.add(key);
+      }
+      match = regex.exec(template);
+    }
+    return Array.from(keys);
+  };
+
   useEffect(() => {
     if (profiles.length === 0) {
       return;
     }
-    setLibraryBlocksByProfile((prev) => {
-      const next = { ...prev };
-      profiles.forEach((profile) => {
-        if (!next[profile.name]) {
-          next[profile.name] = createSeedLibrary();
-        }
+    let isActive = true;
+
+    const loadBlocks = async () => {
+      const entries = await Promise.all(
+        profiles.map(async (profile) => {
+          try {
+            const blocks = await fetchBlocks(profile.name);
+            return { name: profile.name, blocks };
+          } catch (error) {
+            if (import.meta.env.DEV) {
+              console.error("[blocks] failed to load blocks", profile.name, error);
+            }
+            return { name: profile.name, blocks: null };
+          }
+        })
+      );
+
+      if (!isActive) {
+        return;
+      }
+
+      setLibraryBlocksByProfile((prev) => {
+        const next = { ...prev };
+        entries.forEach(({ name, blocks }) => {
+          if (blocks) {
+            if (blocks.libraryBlocks.length === 0 && blocks.activeBlocks.length === 0) {
+              next[name] = createSeedLibrary();
+            } else {
+              next[name] = blocks.libraryBlocks;
+            }
+          } else if (!next[name]) {
+            next[name] = createSeedLibrary();
+          }
+        });
+        return next;
       });
-      return next;
-    });
-    setActiveBlocksByProfile((prev) => {
-      const next = { ...prev };
-      profiles.forEach((profile) => {
-        if (!next[profile.name]) {
-          next[profile.name] = [];
-        }
+
+      setActiveBlocksByProfile((prev) => {
+        const next = { ...prev };
+        entries.forEach(({ name, blocks }) => {
+          if (blocks) {
+            if (blocks.libraryBlocks.length === 0 && blocks.activeBlocks.length === 0) {
+              next[name] = [];
+            } else {
+              next[name] = blocks.activeBlocks;
+            }
+          } else if (!next[name]) {
+            next[name] = [];
+          }
+        });
+        return next;
       });
-      return next;
-    });
+
+      await Promise.all(
+        entries.map(async ({ name, blocks }) => {
+          if (!blocks) {
+            return;
+          }
+          if (blocks.libraryBlocks.length === 0 && blocks.activeBlocks.length === 0) {
+            const seed = createSeedLibrary();
+            try {
+              await updateBlocks(name, { libraryBlocks: seed, activeBlocks: [] });
+            } catch (error) {
+              if (import.meta.env.DEV) {
+                console.error("[blocks] failed to seed blocks", name, error);
+              }
+            }
+          }
+        })
+      );
+    };
+
+    loadBlocks();
+
+    return () => {
+      isActive = false;
+    };
   }, [profiles]);
 
   const libraryBlocks = libraryBlocksByProfile[selectedProfile] ?? [];
@@ -131,31 +205,45 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
         return;
       }
 
+      const nextLibrary =
+        destination === "active"
+          ? libraryBlocks.filter((item) => item.id !== blockId)
+          : [...libraryBlocks, block];
+      const nextActive =
+        destination === "active"
+          ? [...activeBlocks, block]
+          : activeBlocks.filter((item) => item.id !== blockId);
+
       if (destination === "active") {
         setLibraryBlocksByProfile((prev) => ({
           ...prev,
-          [selectedProfile]: (prev[selectedProfile] ?? []).filter(
-            (item) => item.id !== blockId
-          ),
+          [selectedProfile]: nextLibrary,
         }));
         setActiveBlocksByProfile((prev) => ({
           ...prev,
-          [selectedProfile]: [...(prev[selectedProfile] ?? []), block],
+          [selectedProfile]: nextActive,
         }));
       } else {
         setActiveBlocksByProfile((prev) => ({
           ...prev,
-          [selectedProfile]: (prev[selectedProfile] ?? []).filter(
-            (item) => item.id !== blockId
-          ),
+          [selectedProfile]: nextActive,
         }));
         setLibraryBlocksByProfile((prev) => ({
           ...prev,
-          [selectedProfile]: [...(prev[selectedProfile] ?? []), block],
+          [selectedProfile]: nextLibrary,
         }));
       }
+
+      updateBlocks(selectedProfile, {
+        libraryBlocks: nextLibrary,
+        activeBlocks: nextActive,
+      }).catch((error) => {
+        if (import.meta.env.DEV) {
+          console.error("[blocks] failed to persist move", error);
+        }
+      });
     },
-    [blockIndex, selectedProfile]
+    [blockIndex, selectedProfile, libraryBlocks, activeBlocks]
   );
 
   useEffect(() => {
@@ -325,6 +413,7 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
       id: `block-${Date.now()}`,
       name: trimmedName,
       method: builderMethod,
+      path: trimmedPath,
       description: `${builderMethod} ${trimmedPath}`,
       responseTemplate: builderResponseTemplate.trim(),
       templateValues: builderTemplateValues
@@ -344,15 +433,45 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
       ...prev,
       [selectedProfile]: [...(prev[selectedProfile] ?? []), nextBlock],
     }));
+    updateBlocks(selectedProfile, {
+      libraryBlocks: [...libraryBlocks, nextBlock],
+      activeBlocks,
+    }).catch((error) => {
+      if (import.meta.env.DEV) {
+        console.error("[blocks] failed to persist new block", error);
+      }
+    });
     closeBuilder();
   };
 
-  const addTemplateValue = () => {
+  const addTemplateValue = (key = "", value = "") => {
     setBuilderTemplateValues((prev) => [
       ...prev,
-      { id: `template-${Date.now()}-${prev.length}`, key: "", value: "" },
+      { id: `template-${Date.now()}-${prev.length}`, key, value },
     ]);
   };
+
+  useEffect(() => {
+    if (!builderResponseTemplate) {
+      return;
+    }
+    setBuilderTemplateValues((prev) => {
+      const existing = new Set(prev.map((item) => item.key));
+      const missing = extractTemplateKeys(builderResponseTemplate).filter(
+        (key) => !existing.has(key)
+      );
+      if (missing.length === 0) {
+        return prev;
+      }
+      const timestamp = Date.now();
+      const additions = missing.map((key, index) => ({
+        id: `template-${timestamp}-${prev.length + index}`,
+        key,
+        value: "",
+      }));
+      return [...prev, ...additions];
+    });
+  }, [builderResponseTemplate]);
 
   const updateTemplateValue = (id: string, field: "key" | "value", value: string) => {
     setBuilderTemplateValues((prev) =>

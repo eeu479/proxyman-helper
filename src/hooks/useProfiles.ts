@@ -1,6 +1,12 @@
 import type { Dispatch, FormEvent, SetStateAction } from "react";
 import { useEffect, useState } from "react";
-import { createProfile, fetchProfiles, updateProfile } from "../api/profiles";
+import {
+  createProfile,
+  fetchActiveProfile,
+  fetchProfiles,
+  setActiveProfile,
+  updateProfile,
+} from "../api/profiles";
 import type { Profile } from "../types/profile";
 
 type UseProfilesReturn = {
@@ -9,6 +15,7 @@ type UseProfilesReturn = {
   selectedProfile: string;
   setSelectedProfile: Dispatch<SetStateAction<string>>;
   profilesError: string;
+  activeProfileError: string;
   isLoadingProfiles: boolean;
   isSavingProfile: boolean;
   isUpdatingProfile: boolean;
@@ -55,6 +62,7 @@ const useProfiles = (): UseProfilesReturn => {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState("");
   const [profilesError, setProfilesError] = useState("");
+  const [activeProfileError, setActiveProfileError] = useState("");
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
@@ -79,13 +87,32 @@ const useProfiles = (): UseProfilesReturn => {
     const loadProfiles = async () => {
       setIsLoadingProfiles(true);
       setProfilesError("");
+      setActiveProfileError("");
       try {
         const data = await fetchProfiles();
         if (!isActive) {
           return;
         }
         setProfiles(data);
-        setSelectedProfile((prev) => prev || data[0]?.name || "");
+        let nextSelection = data[0]?.name || "";
+        try {
+          const active = await fetchActiveProfile();
+          if (!isActive) {
+            return;
+          }
+          const activeName = active.name ?? "";
+          if (activeName && data.some((profile) => profile.name === activeName)) {
+            nextSelection = activeName;
+          }
+        } catch (error) {
+          if (!isActive) {
+            return;
+          }
+          setActiveProfileError(
+            error instanceof Error ? error.message : "Unable to load active profile."
+          );
+        }
+        setSelectedProfile((prev) => prev || nextSelection);
       } catch (error) {
         if (!isActive) {
           return;
@@ -116,6 +143,30 @@ const useProfiles = (): UseProfilesReturn => {
       setSelectedProfile(profiles[0]?.name ?? "");
     }
   }, [profiles, selectedProfile]);
+
+  useEffect(() => {
+    if (!selectedProfile) {
+      return;
+    }
+    let isActive = true;
+    setActiveProfile(selectedProfile)
+      .then(() => {
+        if (isActive) {
+          setActiveProfileError("");
+        }
+      })
+      .catch((error) => {
+        if (!isActive) {
+          return;
+        }
+        setActiveProfileError(
+          error instanceof Error ? error.message : "Unable to set active profile."
+        );
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [selectedProfile]);
 
   const openCreateProfileModal = () => {
     setCreateProfileError("");
@@ -231,6 +282,7 @@ const useProfiles = (): UseProfilesReturn => {
     selectedProfile,
     setSelectedProfile,
     profilesError,
+    activeProfileError,
     isLoadingProfiles,
     isSavingProfile,
     isUpdatingProfile,

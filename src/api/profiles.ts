@@ -78,6 +78,26 @@ export const updateProfile = async (
   return (await response.json()) as Profile;
 };
 
+type ActiveProfileResponse = {
+  name?: string | null;
+};
+
+export const fetchActiveProfile = async () => {
+  const response = await fetch(`${API_BASE}/api/active-profile`);
+  await ensureOk(response);
+  return (await response.json()) as ActiveProfileResponse;
+};
+
+export const setActiveProfile = async (name: string) => {
+  const response = await fetch(`${API_BASE}/api/active-profile`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  await ensureOk(response);
+  return (await response.json()) as ActiveProfileResponse;
+};
+
 type SubProfileParams = Record<string, string>;
 
 export const createSubProfile = async (

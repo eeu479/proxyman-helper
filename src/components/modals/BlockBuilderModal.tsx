@@ -17,7 +17,7 @@ type BlockBuilderModalProps = {
   onChangePath: (value: string) => void;
   onChangeDescription: (value: string) => void;
   onChangeResponseTemplate: (value: string) => void;
-  onAddTemplateValue: () => void;
+  onAddTemplateValue: (key?: string, value?: string) => void;
   onUpdateTemplateValue: (id: string, field: "key" | "value", value: string) => void;
   onRemoveTemplateValue: (id: string) => void;
 };
@@ -41,6 +41,41 @@ const BlockBuilderModal = ({
   onUpdateTemplateValue,
   onRemoveTemplateValue,
 }: BlockBuilderModalProps) => {
+  const formatJsonTemplate = () => {
+    const trimmed = builderResponseTemplate.trim();
+    if (!trimmed) {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(trimmed);
+      onChangeResponseTemplate(JSON.stringify(parsed, null, 2));
+    } catch {
+      // Leave as-is when it is not valid JSON.
+    }
+  };
+
+  const handleTemplateKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (
+    event
+  ) => {
+    if (event.key !== "Tab") {
+      return;
+    }
+    event.preventDefault();
+    const target = event.currentTarget;
+    const start = target.selectionStart ?? 0;
+    const end = target.selectionEnd ?? 0;
+    const nextValue =
+      builderResponseTemplate.slice(0, start) +
+      "\t" +
+      builderResponseTemplate.slice(end);
+    onChangeResponseTemplate(nextValue);
+
+    requestAnimationFrame(() => {
+      target.selectionStart = start + 1;
+      target.selectionEnd = start + 1;
+    });
+  };
+
   return (
     <Modal
       title="Block Builder"
@@ -103,6 +138,8 @@ const BlockBuilderModal = ({
             className="modal__input modal__textarea"
             value={builderResponseTemplate}
             onChange={(event) => onChangeResponseTemplate(event.target.value)}
+            onBlur={formatJsonTemplate}
+            onKeyDown={handleTemplateKeyDown}
             placeholder='e.g. { "status": "ok", "userId": "{{userId}}" }'
             rows={4}
           />
