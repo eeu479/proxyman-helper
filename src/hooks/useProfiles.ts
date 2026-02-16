@@ -27,14 +27,11 @@ type UseProfilesReturn = {
   editProfileBaseUrl: string;
   editProfileParams: string[];
   editProfileParamInput: string;
+  editProfileOriginalName: string;
   createProfileError: string;
   updateProfileError: string;
-  isManageProfilesModalOpen: boolean;
   isCreateProfileModalOpen: boolean;
-  isEditProfileModalOpen: boolean;
-  setIsManageProfilesModalOpen: Dispatch<SetStateAction<boolean>>;
   setIsCreateProfileModalOpen: Dispatch<SetStateAction<boolean>>;
-  setIsEditProfileModalOpen: Dispatch<SetStateAction<boolean>>;
   setNewProfileName: Dispatch<SetStateAction<string>>;
   setNewProfileBaseUrl: Dispatch<SetStateAction<string>>;
   setNewProfileParams: Dispatch<SetStateAction<string[]>>;
@@ -44,7 +41,6 @@ type UseProfilesReturn = {
   setEditProfileParams: Dispatch<SetStateAction<string[]>>;
   setEditProfileParamInput: Dispatch<SetStateAction<string>>;
   openCreateProfileModal: () => void;
-  openEditProfileModal: (profile: Profile) => void;
   handleAddProfile: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   handleUpdateProfile: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   addProfileParam: (
@@ -77,9 +73,7 @@ const useProfiles = (): UseProfilesReturn => {
   const [editProfileOriginalName, setEditProfileOriginalName] = useState("");
   const [createProfileError, setCreateProfileError] = useState("");
   const [updateProfileError, setUpdateProfileError] = useState("");
-  const [isManageProfilesModalOpen, setIsManageProfilesModalOpen] = useState(false);
   const [isCreateProfileModalOpen, setIsCreateProfileModalOpen] = useState(false);
-  const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
 
   useEffect(() => {
     let isActive = true;
@@ -168,6 +162,18 @@ const useProfiles = (): UseProfilesReturn => {
     };
   }, [selectedProfile]);
 
+  useEffect(() => {
+    const profile = profiles.find((p) => p.name === selectedProfile);
+    if (profile) {
+      setEditProfileOriginalName(profile.name);
+      setEditProfileName(profile.name);
+      setEditProfileBaseUrl(profile.baseUrl ?? "");
+      setEditProfileParams(profile.params ?? []);
+      setEditProfileParamInput("");
+      setUpdateProfileError("");
+    }
+  }, [selectedProfile, profiles]);
+
   const openCreateProfileModal = () => {
     setCreateProfileError("");
     setNewProfileName("");
@@ -175,16 +181,6 @@ const useProfiles = (): UseProfilesReturn => {
     setNewProfileParams([]);
     setNewProfileParamInput("");
     setIsCreateProfileModalOpen(true);
-  };
-
-  const openEditProfileModal = (profile: Profile) => {
-    setUpdateProfileError("");
-    setEditProfileOriginalName(profile.name);
-    setEditProfileName(profile.name);
-    setEditProfileBaseUrl(profile.baseUrl ?? "");
-    setEditProfileParams(profile.params ?? []);
-    setEditProfileParamInput("");
-    setIsEditProfileModalOpen(true);
   };
 
   const handleAddProfile = async (event: FormEvent<HTMLFormElement>) => {
@@ -266,7 +262,6 @@ const useProfiles = (): UseProfilesReturn => {
       if (selectedProfile === editProfileOriginalName) {
         setSelectedProfile(updated.name);
       }
-      setIsEditProfileModalOpen(false);
     } catch (error) {
       setUpdateProfileError(
         error instanceof Error ? error.message : "Unable to update profile."
@@ -294,14 +289,11 @@ const useProfiles = (): UseProfilesReturn => {
     editProfileBaseUrl,
     editProfileParams,
     editProfileParamInput,
+    editProfileOriginalName,
     createProfileError,
     updateProfileError,
-    isManageProfilesModalOpen,
     isCreateProfileModalOpen,
-    isEditProfileModalOpen,
-    setIsManageProfilesModalOpen,
     setIsCreateProfileModalOpen,
-    setIsEditProfileModalOpen,
     setNewProfileName,
     setNewProfileBaseUrl,
     setNewProfileParams,
@@ -311,7 +303,6 @@ const useProfiles = (): UseProfilesReturn => {
     setEditProfileParams,
     setEditProfileParamInput,
     openCreateProfileModal,
-    openEditProfileModal,
     handleAddProfile,
     handleUpdateProfile,
     addProfileParam,

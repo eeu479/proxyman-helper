@@ -3,26 +3,33 @@ import type { Profile } from "../../types/profile";
 type SidebarProps = {
   profiles: Profile[];
   selectedProfile: string;
+  selectedSubprofile: string;
   activeProfileError?: string;
-  activeView: "builder" | "debug";
+  activeView: "builder" | "debug" | "settings";
+  theme: "dark" | "light";
   onSelectProfile: (profileId: string) => void;
-  onChangeView: (view: "builder" | "debug") => void;
-  onManageProfiles: () => void;
-  onManageSubprofiles: () => void;
+  onSelectSubprofile: (subprofileId: string) => void;
+  onChangeView: (view: "builder" | "debug" | "settings") => void;
+  onCreateProfile: () => void;
+  onToggleTheme: () => void;
 };
 
 const Sidebar = ({
   profiles,
   selectedProfile,
+  selectedSubprofile,
   activeProfileError,
   activeView,
+  theme,
   onSelectProfile,
+  onSelectSubprofile,
   onChangeView,
-  onManageProfiles,
-  onManageSubprofiles,
+  onCreateProfile,
+  onToggleTheme,
 }: SidebarProps) => {
   const selectedProfileData =
     profiles.find((profile) => profile.name === selectedProfile) ?? null;
+  const subprofiles = selectedProfileData?.subProfiles ?? [];
   const hasProfiles = profiles.length > 0;
 
   return (
@@ -32,55 +39,58 @@ const Sidebar = ({
           <label className="sidebar__label" htmlFor="profile-select">
             Profile
           </label>
-          <button
-            className="sidebar__icon-button"
-            type="button"
-            onClick={onManageProfiles}
-            aria-label="Manage profiles"
+        </div>
+        <div className="sidebar__select-row">
+          <select
+            id="profile-select"
+            className="sidebar__select"
+            value={selectedProfile}
+            onChange={(event) => onSelectProfile(event.target.value)}
+            disabled={!hasProfiles}
           >
-            ⚙
+            {profiles.map((profile) => (
+              <option key={profile.name} value={profile.name}>
+                {profile.name}
+              </option>
+            ))}
+          </select>
+          <button
+            className="sidebar__add-button"
+            type="button"
+            onClick={onCreateProfile}
+            aria-label="Create profile"
+            title="Create profile"
+          >
+            +
           </button>
         </div>
-        <select
-          id="profile-select"
-          className="sidebar__select"
-          value={selectedProfile}
-          onChange={(event) => onSelectProfile(event.target.value)}
-          disabled={!hasProfiles}
-        >
-          {profiles.map((profile) => (
-            <option key={profile.name} value={profile.name}>
-              {profile.name}
-            </option>
-          ))}
-        </select>
         {activeProfileError ? (
           <div className="settings__empty">{activeProfileError}</div>
         ) : null}
       </div>
       <div className="sidebar__section">
-        <div className="sidebar__section-header">
-          <h2 className="sidebar__title">Subprofiles</h2>
-          <button
-            className="sidebar__icon-button"
-            type="button"
-            onClick={onManageSubprofiles}
-            aria-label="Manage subprofiles"
-          >
-            ⚙
-          </button>
+        <div className="sidebar__label-row">
+          <label className="sidebar__label" htmlFor="subprofile-select">
+            Subprofile
+          </label>
         </div>
-        <ul className="sidebar__list">
-          {(selectedProfileData?.subProfiles ?? []).map((subprofile) => (
-            <li key={subprofile.name} className="sidebar__item">
-              {subprofile.name}
-            </li>
-          ))}
-          {!selectedProfileData ||
-          (selectedProfileData.subProfiles?.length ?? 0) === 0 ? (
-            <li className="sidebar__item">No subprofiles yet.</li>
-          ) : null}
-        </ul>
+        <select
+          id="subprofile-select"
+          className="sidebar__select"
+          value={selectedSubprofile}
+          onChange={(event) => onSelectSubprofile(event.target.value)}
+          disabled={subprofiles.length === 0}
+        >
+          {subprofiles.length === 0 ? (
+            <option value="">No subprofiles</option>
+          ) : (
+            subprofiles.map((sub) => (
+              <option key={sub.name} value={sub.name}>
+                {sub.name}
+              </option>
+            ))
+          )}
+        </select>
       </div>
       <div className="sidebar__section">
         <div className="sidebar__section-header">
@@ -101,14 +111,24 @@ const Sidebar = ({
           >
             Debug
           </button>
+          <button
+            className={`sidebar__nav-button ${activeView === "settings" ? "is-active" : ""}`}
+            type="button"
+            onClick={() => onChangeView("settings")}
+          >
+            Settings
+          </button>
         </div>
       </div>
       <div className="sidebar__footer">
-        <button className="sidebar__nav-button" type="button" onClick={onManageSubprofiles}>
-          Manage Subprofiles
-        </button>
-        <button className="sidebar__nav-button" type="button" onClick={onManageProfiles}>
-          Manage Profiles
+        <button
+          className="sidebar__theme-toggle"
+          type="button"
+          onClick={onToggleTheme}
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {theme === "dark" ? "☀️" : "🌙"}
         </button>
       </div>
     </aside>

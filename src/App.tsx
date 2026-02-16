@@ -1,29 +1,38 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ActivePanel from "./components/blocks/ActivePanel";
 import LibraryPanel from "./components/blocks/LibraryPanel";
 import DebugPanel from "./components/debug/DebugPanel";
 import Sidebar from "./components/layout/Sidebar";
 import BlockBuilderModal from "./components/modals/BlockBuilderModal";
 import CreateProfileModal from "./components/modals/CreateProfileModal";
-import EditProfileModal from "./components/modals/EditProfileModal";
-import ManageProfilesModal from "./components/modals/ManageProfilesModal";
 import CreateSubprofileModal from "./components/modals/CreateSubprofileModal";
 import EditSubprofileModal from "./components/modals/EditSubprofileModal";
-import ManageSubprofilesModal from "./components/modals/ManageSubprofilesModal";
+import SettingsPanel from "./components/settings/SettingsPanel";
 import useBlocks from "./hooks/useBlocks";
 import useProfiles from "./hooks/useProfiles";
 import useSubprofiles from "./hooks/useSubprofiles";
 
 const App = () => {
-  const [activeView, setActiveView] = useState<"builder" | "debug">("builder");
+  const [activeView, setActiveView] = useState<"builder" | "debug" | "settings">(
+    "builder"
+  );
+  const [selectedSubprofile, setSelectedSubprofile] = useState("");
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    const saved = localStorage.getItem("theme");
+    return saved === "light" ? "light" : "dark";
+  });
+
+  useEffect(() => {
+    document.body.dataset.theme = theme;
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+
   const {
     profiles,
     setProfiles,
     selectedProfile,
     setSelectedProfile,
-    profilesError,
     activeProfileError,
-    isLoadingProfiles,
     isSavingProfile,
     isUpdatingProfile,
     newProfileName,
@@ -36,12 +45,8 @@ const App = () => {
     editProfileParamInput,
     createProfileError,
     updateProfileError,
-    isManageProfilesModalOpen,
     isCreateProfileModalOpen,
-    isEditProfileModalOpen,
-    setIsManageProfilesModalOpen,
     setIsCreateProfileModalOpen,
-    setIsEditProfileModalOpen,
     setNewProfileName,
     setNewProfileBaseUrl,
     setNewProfileParams,
@@ -51,7 +56,6 @@ const App = () => {
     setEditProfileParams,
     setEditProfileParamInput,
     openCreateProfileModal,
-    openEditProfileModal,
     handleAddProfile,
     handleUpdateProfile,
     addProfileParam,
@@ -59,7 +63,6 @@ const App = () => {
   } = useProfiles();
 
   const {
-    isManageSubprofilesModalOpen,
     isCreateSubprofileModalOpen,
     isEditSubprofileModalOpen,
     newSubprofileName,
@@ -74,7 +77,6 @@ const App = () => {
     updateSubprofileError,
     isSavingSubprofile,
     isUpdatingSubprofile,
-    setIsManageSubprofilesModalOpen,
     setIsCreateSubprofileModalOpen,
     setIsEditSubprofileModalOpen,
     setNewSubprofileName,
@@ -136,23 +138,64 @@ const App = () => {
     setBlockActiveVariant,
   } = useBlocks({ profiles, selectedProfile });
 
+  useEffect(() => {
+    const profileData = profiles.find((p) => p.name === selectedProfile);
+    const subs = profileData?.subProfiles ?? [];
+    if (subs.length === 0) {
+      setSelectedSubprofile("");
+    } else if (!subs.some((s) => s.name === selectedSubprofile)) {
+      setSelectedSubprofile(subs[0]?.name ?? "");
+    }
+  }, [profiles, selectedProfile, selectedSubprofile]);
 
   return (
     <div className="app">
       <Sidebar
         profiles={profiles}
         selectedProfile={selectedProfile}
+        selectedSubprofile={selectedSubprofile}
         activeProfileError={activeProfileError}
         activeView={activeView}
+        theme={theme}
         onSelectProfile={setSelectedProfile}
+        onSelectSubprofile={setSelectedSubprofile}
         onChangeView={setActiveView}
-        onManageProfiles={() => setIsManageProfilesModalOpen(true)}
-        onManageSubprofiles={() => setIsManageSubprofilesModalOpen(true)}
+        onCreateProfile={openCreateProfileModal}
+        onToggleTheme={() =>
+          setTheme((current) => (current === "dark" ? "light" : "dark"))
+        }
       />
 
-      <main className={`main ${activeView === "debug" ? "main--single" : ""}`}>
+      <main className={`main ${activeView !== "builder" ? "main--single" : ""}`}>
         {activeView === "debug" ? (
           <DebugPanel onCreateBlockFromLog={openBuilderFromLog} />
+        ) : activeView === "settings" ? (
+          <SettingsPanel
+            profiles={profiles}
+            selectedProfile={selectedProfile}
+            editProfileName={editProfileName}
+            editProfileBaseUrl={editProfileBaseUrl}
+            editProfileParams={editProfileParams}
+            editProfileParamInput={editProfileParamInput}
+            isUpdatingProfile={isUpdatingProfile}
+            updateProfileError={updateProfileError}
+            onChangeName={setEditProfileName}
+            onChangeBaseUrl={setEditProfileBaseUrl}
+            onChangeParamInput={setEditProfileParamInput}
+            onAddParam={() =>
+              addProfileParam(
+                editProfileParamInput,
+                setEditProfileParams,
+                setEditProfileParamInput
+              )
+            }
+            onRemoveParam={(value: string) =>
+              removeProfileParam(value, setEditProfileParams)
+            }
+            onSave={handleUpdateProfile}
+            onAddSubprofile={openCreateSubprofileModal}
+            onEditSubprofile={openEditSubprofileModal}
+          />
         ) : (
           <>
             <LibraryPanel
@@ -183,6 +226,7 @@ const App = () => {
           </>
         )}
       </main>
+
       <BlockBuilderModal
         isOpen={isBuilderOpen}
         isEditing={isEditingBlock}
@@ -213,15 +257,7 @@ const App = () => {
         onUpdateTemplateValue={updateTemplateValue}
         onRemoveTemplateValue={removeTemplateValue}
       />
-      <ManageProfilesModal
-        isOpen={isManageProfilesModalOpen}
-        profiles={profiles}
-        isLoading={isLoadingProfiles}
-        errorMessage={profilesError}
-        onClose={() => setIsManageProfilesModalOpen(false)}
-        onCreate={openCreateProfileModal}
-        onEdit={openEditProfileModal}
-      />
+
       <CreateProfileModal
         isOpen={isCreateProfileModalOpen}
         name={newProfileName}
@@ -240,34 +276,7 @@ const App = () => {
         }
         onRemoveParam={(value: string) => removeProfileParam(value, setNewProfileParams)}
       />
-      <EditProfileModal
-        isOpen={isEditProfileModalOpen}
-        name={editProfileName}
-        baseUrl={editProfileBaseUrl}
-        params={editProfileParams}
-        paramInput={editProfileParamInput}
-        isSubmitting={isUpdatingProfile}
-        errorMessage={updateProfileError}
-        onClose={() => setIsEditProfileModalOpen(false)}
-        onSubmit={handleUpdateProfile}
-        onChangeName={setEditProfileName}
-        onChangeBaseUrl={setEditProfileBaseUrl}
-        onChangeParamInput={setEditProfileParamInput}
-        onAddParam={() =>
-          addProfileParam(editProfileParamInput, setEditProfileParams, setEditProfileParamInput)
-        }
-        onRemoveParam={(value: string) => removeProfileParam(value, setEditProfileParams)}
-      />
-      <ManageSubprofilesModal
-        isOpen={isManageSubprofilesModalOpen}
-        profiles={profiles}
-        selectedProfile={selectedProfile}
-        isLoading={isLoadingProfiles}
-        errorMessage={profilesError}
-        onClose={() => setIsManageSubprofilesModalOpen(false)}
-        onCreate={openCreateSubprofileModal}
-        onEdit={openEditSubprofileModal}
-      />
+
       <CreateSubprofileModal
         isOpen={isCreateSubprofileModalOpen}
         name={newSubprofileName}
@@ -293,6 +302,7 @@ const App = () => {
           removeSubprofileParam(key, setNewSubprofileParams)
         }
       />
+
       <EditSubprofileModal
         isOpen={isEditSubprofileModalOpen}
         name={editSubprofileName}

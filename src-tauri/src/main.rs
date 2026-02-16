@@ -201,6 +201,7 @@ struct MatchResult {
 struct BlockMatch {
   profile: Profile,
   block: Block,
+  extracted_params: HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -981,19 +982,32 @@ fn find_block_match(
     .iter()
     .find(|profile| profile.name == active_profile)?
     .clone();
-  let matched = profile
-    .active_blocks
-    .iter()
-    .find(|block| {
-      let block_path = derive_block_path(block);
-      block_method_matches(block, method) && block_path.as_deref() == Some(path)
-    })
-    .cloned()?;
+  for block in profile.active_blocks.iter() {
+    if !block_method_matches(block, method) {
+      continue;
+    }
+    let block_path = derive_block_path(block)?;
+    if block_path == path {
+      return Some(BlockMatch {
+        profile: profile.clone(),
+        block: block.clone(),
+        extracted_params: HashMap::new(),
+      });
+    }
+    if block_path.contains('{') && block_path.contains('}') {
+      let (regex, tokens) = compile_path_matcher(&block_path, &HashMap::new());
+      if let Some(captures) = regex.captures(path) {
+        let extracted = extract_params(&tokens, &captures);
+        return Some(BlockMatch {
+          profile: profile.clone(),
+          block: block.clone(),
+          extracted_params: extracted,
+        });
+      }
+    }
+  }
 
-  Some(BlockMatch {
-    profile,
-    block: matched,
-  })
+  None
 }
 
 fn method_matches(request: &RequestConfig, method: &Method) -> bool {
@@ -1178,10 +1192,10 @@ fn build_response(
 }
 
 fn build_block_response(block_match: &BlockMatch) -> (Response, LoggedResponse) {
-  let template_values = active_template_values(&block_match.block);
+  let template_values = merged_template_values(block_match);
   let rendered = render_template(
     &block_match.block.response_template,
-    template_values,
+    &template_values,
   );
   let normalized = normalize_json_quotes(&rendered);
 
@@ -1213,7 +1227,7 @@ fn build_block_response(block_match: &BlockMatch) -> (Response, LoggedResponse) 
     if trimmed.is_empty() {
       continue;
     }
-    let rendered_value = render_template(value, template_values);
+    let rendered_value = render_template(value, &template_values);
     if let Ok(header_name) = HeaderName::from_bytes(trimmed.as_bytes()) {
       if let Ok(header_value) = HeaderValue::from_str(&rendered_value) {
         response.headers_mut().insert(header_name, header_value);
@@ -1265,6 +1279,21 @@ fn active_template_values(block: &Block) -> &[TemplateValue] {
     return &variant.values;
   }
   &block.template_values
+}
+
+fn merged_template_values(block_match: &BlockMatch) -> Vec<TemplateValue> {
+  let mut values = active_template_values(&block_match.block).to_vec();
+  for (key, value) in &block_match.extracted_params {
+    if values.iter().any(|item| item.key == *key) {
+      continue;
+    }
+    values.push(TemplateValue {
+      id: format!("path-param-{}", key),
+      key: key.clone(),
+      value: value.clone(),
+    });
+  }
+  values
 }
 
 fn normalize_json_quotes(value: &str) -> String {

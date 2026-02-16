@@ -10,7 +10,6 @@ type UseSubprofilesParams = {
 };
 
 type UseSubprofilesReturn = {
-  isManageSubprofilesModalOpen: boolean;
   isCreateSubprofileModalOpen: boolean;
   isEditSubprofileModalOpen: boolean;
   newSubprofileName: string;
@@ -25,7 +24,6 @@ type UseSubprofilesReturn = {
   updateSubprofileError: string;
   isSavingSubprofile: boolean;
   isUpdatingSubprofile: boolean;
-  setIsManageSubprofilesModalOpen: Dispatch<SetStateAction<boolean>>;
   setIsCreateSubprofileModalOpen: Dispatch<SetStateAction<boolean>>;
   setIsEditSubprofileModalOpen: Dispatch<SetStateAction<boolean>>;
   setNewSubprofileName: Dispatch<SetStateAction<string>>;
@@ -76,8 +74,6 @@ const useSubprofiles = ({
   >({});
   const [createSubprofileError, setCreateSubprofileError] = useState("");
   const [updateSubprofileError, setUpdateSubprofileError] = useState("");
-  const [isManageSubprofilesModalOpen, setIsManageSubprofilesModalOpen] =
-    useState(false);
   const [isCreateSubprofileModalOpen, setIsCreateSubprofileModalOpen] =
     useState(false);
   const [isEditSubprofileModalOpen, setIsEditSubprofileModalOpen] =
@@ -237,7 +233,6 @@ const useSubprofiles = ({
   };
 
   return {
-    isManageSubprofilesModalOpen,
     isCreateSubprofileModalOpen,
     isEditSubprofileModalOpen,
     newSubprofileName,
@@ -252,7 +247,6 @@ const useSubprofiles = ({
     updateSubprofileError,
     isSavingSubprofile,
     isUpdatingSubprofile,
-    setIsManageSubprofilesModalOpen,
     setIsCreateSubprofileModalOpen,
     setIsEditSubprofileModalOpen,
     setNewSubprofileName,
