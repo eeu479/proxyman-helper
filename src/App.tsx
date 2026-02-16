@@ -101,6 +101,7 @@ const App = () => {
     builderPath,
     builderDescription,
     builderResponseTemplate,
+    builderResponseHeaders,
     builderTemplateValues,
     setIsBuilderOpen,
     setBuilderName,
@@ -108,6 +109,10 @@ const App = () => {
     setBuilderPath,
     setBuilderDescription,
     setBuilderResponseTemplate,
+    addResponseHeader,
+    updateResponseHeader,
+    removeResponseHeader,
+    openBuilderFromLog,
     addTemplateValue,
     updateTemplateValue,
     removeTemplateValue,
@@ -137,7 +142,7 @@ const App = () => {
 
       <main className={`main ${activeView === "debug" ? "main--single" : ""}`}>
         {activeView === "debug" ? (
-          <DebugPanel />
+          <DebugPanel onCreateBlockFromLog={openBuilderFromLog} />
         ) : (
           <>
             <LibraryPanel
@@ -170,6 +175,7 @@ const App = () => {
         builderPath={builderPath}
         builderDescription={builderDescription}
         builderResponseTemplate={builderResponseTemplate}
+        builderResponseHeaders={builderResponseHeaders}
         builderTemplateValues={builderTemplateValues}
         onClose={closeBuilder}
         onSubmit={handleCreateBlock}
@@ -178,6 +184,9 @@ const App = () => {
         onChangePath={setBuilderPath}
         onChangeDescription={setBuilderDescription}
         onChangeResponseTemplate={setBuilderResponseTemplate}
+        onAddResponseHeader={addResponseHeader}
+        onUpdateResponseHeader={updateResponseHeader}
+        onRemoveResponseHeader={removeResponseHeader}
         onAddTemplateValue={addTemplateValue}
         onUpdateTemplateValue={updateTemplateValue}
         onRemoveTemplateValue={removeTemplateValue}

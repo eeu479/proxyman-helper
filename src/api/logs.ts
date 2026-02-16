@@ -8,6 +8,11 @@ export type RequestLogEntry = {
   subProfile?: string | null;
   request?: string | null;
   block?: string | null;
+  response?: {
+    status?: number | null;
+    headers?: Record<string, string>;
+    body?: string | null;
+  } | null;
 };
 
 const DEFAULT_API_BASE = "http://127.0.0.1:3000";

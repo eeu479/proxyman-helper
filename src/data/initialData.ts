@@ -8,6 +8,7 @@ export const initialLibrary: Block[] = [
     path: "/api/session",
     description: "POST /api/session",
     responseTemplate: "",
+    responseHeaders: {},
     templateValues: [],
   },
   {
@@ -17,6 +18,7 @@ export const initialLibrary: Block[] = [
     path: "/api/catalog",
     description: "GET /api/catalog",
     responseTemplate: "",
+    responseHeaders: {},
     templateValues: [],
   },
   {
@@ -26,6 +28,7 @@ export const initialLibrary: Block[] = [
     path: "/api/cart",
     description: "PATCH /api/cart",
     responseTemplate: "",
+    responseHeaders: {},
     templateValues: [],
   },
   {
@@ -35,6 +38,7 @@ export const initialLibrary: Block[] = [
     path: "/api/checkout",
     description: "POST /api/checkout",
     responseTemplate: "",
+    responseHeaders: {},
     templateValues: [],
   },
 ];

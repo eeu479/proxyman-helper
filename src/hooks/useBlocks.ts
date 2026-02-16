@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchBlocks, updateBlocks } from "../api/blocks";
 import { initialLibrary } from "../data/initialData";
 import type { Block } from "../types/block";
+import type { RequestLogEntry } from "../api/logs";
 import type { Profile } from "../types/profile";
 
 type UseBlocksParams = {
@@ -19,6 +20,7 @@ type UseBlocksReturn = {
   builderPath: string;
   builderDescription: string;
   builderResponseTemplate: string;
+  builderResponseHeaders: { id: string; key: string; value: string }[];
   builderTemplateValues: { id: string; key: string; value: string }[];
   setIsBuilderOpen: (isOpen: boolean) => void;
   setBuilderName: (value: string) => void;
@@ -26,6 +28,10 @@ type UseBlocksReturn = {
   setBuilderPath: (value: string) => void;
   setBuilderDescription: (value: string) => void;
   setBuilderResponseTemplate: (value: string) => void;
+  addResponseHeader: (key?: string, value?: string) => void;
+  updateResponseHeader: (id: string, field: "key" | "value", value: string) => void;
+  removeResponseHeader: (id: string) => void;
+  openBuilderFromLog: (entry: RequestLogEntry) => void;
   addTemplateValue: (key?: string, value?: string) => void;
   updateTemplateValue: (id: string, field: "key" | "value", value: string) => void;
   removeTemplateValue: (id: string) => void;
@@ -60,6 +66,9 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
   const [builderPath, setBuilderPath] = useState("/api/");
   const [builderDescription, setBuilderDescription] = useState("");
   const [builderResponseTemplate, setBuilderResponseTemplate] = useState("");
+  const [builderResponseHeaders, setBuilderResponseHeaders] = useState<
+    { id: string; key: string; value: string }[]
+  >([]);
   const [builderTemplateValues, setBuilderTemplateValues] = useState<
     { id: string; key: string; value: string }[]
   >([]);
@@ -390,6 +399,7 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     setBuilderPath("/api/");
     setBuilderDescription("");
     setBuilderResponseTemplate("");
+    setBuilderResponseHeaders([]);
     setBuilderTemplateValues([]);
   };
 
@@ -416,6 +426,14 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
       path: trimmedPath,
       description: `${builderMethod} ${trimmedPath}`,
       responseTemplate: builderResponseTemplate.trim(),
+      responseHeaders: builderResponseHeaders.reduce<Record<string, string>>((acc, item) => {
+        const key = item.key.trim();
+        if (!key) {
+          return acc;
+        }
+        acc[key] = item.value.trim();
+        return acc;
+      }, {}),
       templateValues: builderTemplateValues
         .map((item) => ({
           ...item,
@@ -451,6 +469,13 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     ]);
   };
 
+  const addResponseHeader = (key = "", value = "") => {
+    setBuilderResponseHeaders((prev) => [
+      ...prev,
+      { id: `header-${Date.now()}-${prev.length}`, key, value },
+    ]);
+  };
+
   useEffect(() => {
     if (!builderResponseTemplate) {
       return;
@@ -483,6 +508,33 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     setBuilderTemplateValues((prev) => prev.filter((item) => item.id !== id));
   };
 
+  const updateResponseHeader = (id: string, field: "key" | "value", value: string) => {
+    setBuilderResponseHeaders((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
+    );
+  };
+
+  const removeResponseHeader = (id: string) => {
+    setBuilderResponseHeaders((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const openBuilderFromLog = (entry: RequestLogEntry) => {
+    setBuilderName(`${entry.method} ${entry.path}`);
+    setBuilderMethod(entry.method);
+    setBuilderPath(entry.path);
+    setBuilderDescription(`${entry.method} ${entry.path}`);
+    setBuilderResponseTemplate(entry.response?.body ?? "");
+    setBuilderResponseHeaders(
+      Object.entries(entry.response?.headers ?? {}).map(([key, value], index) => ({
+        id: `header-${Date.now()}-${index}`,
+        key,
+        value,
+      }))
+    );
+    setBuilderTemplateValues([]);
+    setIsBuilderOpen(true);
+  };
+
   return {
     libraryBlocks,
     activeBlocks,
@@ -492,6 +544,7 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     builderPath,
     builderDescription,
     builderResponseTemplate,
+    builderResponseHeaders,
     builderTemplateValues,
     setIsBuilderOpen,
     setBuilderName,
@@ -499,6 +552,10 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     setBuilderPath,
     setBuilderDescription,
     setBuilderResponseTemplate,
+    addResponseHeader,
+    updateResponseHeader,
+    removeResponseHeader,
+    openBuilderFromLog,
     addTemplateValue,
     updateTemplateValue,
     removeTemplateValue,

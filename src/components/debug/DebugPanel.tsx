@@ -20,7 +20,11 @@ const buildQueryString = (query: Record<string, string>) => {
 
 const DEFAULT_API_BASE = "http://127.0.0.1:3000";
 
-const DebugPanel = () => {
+type DebugPanelProps = {
+  onCreateBlockFromLog: (entry: RequestLogEntry) => void;
+};
+
+const DebugPanel = ({ onCreateBlockFromLog }: DebugPanelProps) => {
   const [logs, setLogs] = useState<RequestLogEntry[]>([]);
   const [isPaused, setIsPaused] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -86,6 +90,7 @@ const DebugPanel = () => {
           <span className="debug__cell">Matched</span>
           <span className="debug__cell">Profile</span>
           <span className="debug__cell">Request</span>
+          <span className="debug__cell">Actions</span>
         </div>
         {rows.length === 0 ? (
           <div className="debug__empty">
@@ -114,6 +119,15 @@ const DebugPanel = () => {
               </span>
               <span className="debug__cell">
                 {entry.request ?? entry.block ?? "—"}
+              </span>
+              <span className="debug__cell">
+                <button
+                  className="panel__action panel__action--ghost debug__action"
+                  type="button"
+                  onClick={() => onCreateBlockFromLog(entry)}
+                >
+                  Create Block
+                </button>
               </span>
             </div>
           ))

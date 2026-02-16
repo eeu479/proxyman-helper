@@ -11,5 +11,6 @@ export type Block = {
   path: string;
   description: string;
   responseTemplate: string;
+  responseHeaders: Record<string, string>;
   templateValues: TemplateValue[];
 };
