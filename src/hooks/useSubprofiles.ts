@@ -1,6 +1,10 @@
 import type { Dispatch, FormEvent, SetStateAction } from "react";
 import { useState } from "react";
-import { createSubProfile, updateSubProfile } from "../api/profiles";
+import {
+  createSubProfile,
+  deleteSubProfile,
+  updateSubProfile,
+} from "../api/profiles";
 import type { Profile } from "../types/profile";
 
 type UseSubprofilesParams = {
@@ -37,19 +41,26 @@ type UseSubprofilesReturn = {
     SetStateAction<{ key: string; value: string }[]>
   >;
   openCreateSubprofileModal: () => void;
-  openEditSubprofileModal: (profileName: string, subprofileName: string) => void;
+  openEditSubprofileModal: (
+    profileName: string,
+    subprofileName: string,
+  ) => void;
   addSubprofileParam: (
     value: string,
     setParams: Dispatch<SetStateAction<{ key: string; value: string }[]>>,
-    setValueInput: Dispatch<SetStateAction<string>>
+    setValueInput: Dispatch<SetStateAction<string>>,
   ) => void;
   removeSubprofileParam: (
     key: string,
-    setParams: Dispatch<SetStateAction<{ key: string; value: string }[]>>
+    setParams: Dispatch<SetStateAction<{ key: string; value: string }[]>>,
   ) => void;
   updateSubprofileValueForKey: (key: string, value: string) => void;
   handleCreateSubprofile: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   handleUpdateSubprofile: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  deleteSubprofile: (
+    profileName: string,
+    subprofileName: string,
+  ) => Promise<void>;
 };
 
 const useSubprofiles = ({
@@ -67,7 +78,8 @@ const useSubprofiles = ({
   const [editSubprofileParams, setEditSubprofileParams] = useState<
     { key: string; value: string }[]
   >([]);
-  const [editSubprofileOriginalName, setEditSubprofileOriginalName] = useState("");
+  const [editSubprofileOriginalName, setEditSubprofileOriginalName] =
+    useState("");
   const [subprofileProfileName, setSubprofileProfileName] = useState("");
   const [subprofileValueByKey, setSubprofileValueByKey] = useState<
     Record<string, string>
@@ -100,9 +112,14 @@ const useSubprofiles = ({
     setIsCreateSubprofileModalOpen(true);
   };
 
-  const openEditSubprofileModal = (profileName: string, subprofileName: string) => {
+  const openEditSubprofileModal = (
+    profileName: string,
+    subprofileName: string,
+  ) => {
     const profile = profiles.find((item) => item.name === profileName);
-    const subprofile = profile?.subProfiles?.find((item) => item.name === subprofileName);
+    const subprofile = profile?.subProfiles?.find(
+      (item) => item.name === subprofileName,
+    );
     if (!profile || !subprofile) {
       return;
     }
@@ -121,7 +138,7 @@ const useSubprofiles = ({
     setEditSubprofileParams(
       Object.entries(existingParams)
         .filter(([key]) => !requiredKeys.includes(key))
-        .map(([key, value]) => ({ key, value }))
+        .map(([key, value]) => ({ key, value })),
     );
     setIsEditSubprofileModalOpen(true);
   };
@@ -129,7 +146,7 @@ const useSubprofiles = ({
   const addSubprofileParam = (
     value: string,
     setParams: Dispatch<SetStateAction<{ key: string; value: string }[]>>,
-    setValueInput: Dispatch<SetStateAction<string>>
+    setValueInput: Dispatch<SetStateAction<string>>,
   ) => {
     const trimmedValue = value.trim();
     if (!trimmedValue) {
@@ -142,7 +159,7 @@ const useSubprofiles = ({
 
   const removeSubprofileParam = (
     key: string,
-    setParams: Dispatch<SetStateAction<{ key: string; value: string }[]>>
+    setParams: Dispatch<SetStateAction<{ key: string; value: string }[]>>,
   ) => {
     setParams((prev) => prev.filter((item) => item.key !== key));
   };
@@ -160,13 +177,19 @@ const useSubprofiles = ({
 
     const params = {
       ...subprofileValueByKey,
-      ...Object.fromEntries(newSubprofileParams.map((param) => [param.key, param.value])),
+      ...Object.fromEntries(
+        newSubprofileParams.map((param) => [param.key, param.value]),
+      ),
     };
 
     setIsSavingSubprofile(true);
     setCreateSubprofileError("");
     try {
-      const created = await createSubProfile(subprofileProfileName, trimmedName, params);
+      const created = await createSubProfile(
+        subprofileProfileName,
+        trimmedName,
+        params,
+      );
       setProfiles((prev) =>
         prev.map((profile) =>
           profile.name === subprofileProfileName
@@ -174,13 +197,13 @@ const useSubprofiles = ({
                 ...profile,
                 subProfiles: [...(profile.subProfiles ?? []), created],
               }
-            : profile
-        )
+            : profile,
+        ),
       );
       setIsCreateSubprofileModalOpen(false);
     } catch (error) {
       setCreateSubprofileError(
-        error instanceof Error ? error.message : "Unable to create subprofile."
+        error instanceof Error ? error.message : "Unable to create subprofile.",
       );
     } finally {
       setIsSavingSubprofile(false);
@@ -196,7 +219,9 @@ const useSubprofiles = ({
 
     const params = {
       ...subprofileValueByKey,
-      ...Object.fromEntries(editSubprofileParams.map((param) => [param.key, param.value])),
+      ...Object.fromEntries(
+        editSubprofileParams.map((param) => [param.key, param.value]),
+      ),
     };
 
     setIsUpdatingSubprofile(true);
@@ -208,7 +233,7 @@ const useSubprofiles = ({
         {
           name: trimmedName,
           params,
-        }
+        },
       );
       setProfiles((prev) =>
         prev.map((profile) =>
@@ -216,19 +241,42 @@ const useSubprofiles = ({
             ? {
                 ...profile,
                 subProfiles: (profile.subProfiles ?? []).map((sub) =>
-                  sub.name === editSubprofileOriginalName ? updated : sub
+                  sub.name === editSubprofileOriginalName ? updated : sub,
                 ),
               }
-            : profile
-        )
+            : profile,
+        ),
       );
       setIsEditSubprofileModalOpen(false);
     } catch (error) {
       setUpdateSubprofileError(
-        error instanceof Error ? error.message : "Unable to update subprofile."
+        error instanceof Error ? error.message : "Unable to update subprofile.",
       );
     } finally {
       setIsUpdatingSubprofile(false);
+    }
+  };
+
+  const deleteSubprofile = async (
+    profileName: string,
+    subprofileName: string,
+  ) => {
+    try {
+      await deleteSubProfile(profileName, subprofileName);
+      setProfiles((prev) =>
+        prev.map((profile) =>
+          profile.name === profileName
+            ? {
+                ...profile,
+                subProfiles: (profile.subProfiles ?? []).filter(
+                  (sub) => sub.name !== subprofileName,
+                ),
+              }
+            : profile,
+        ),
+      );
+    } catch {
+      // Caller may show error; API throws on failure
     }
   };
 
@@ -262,6 +310,7 @@ const useSubprofiles = ({
     updateSubprofileValueForKey,
     handleCreateSubprofile,
     handleUpdateSubprofile,
+    deleteSubprofile,
   };
 };
 

@@ -79,6 +79,7 @@ type UseBlocksReturn = {
     source: "library" | "active",
   ) => (event: ReactPointerEvent<HTMLDivElement>) => void;
   removeLibraryBlock: (blockId: string) => void;
+  clearActiveBlocks: () => void;
   replaceBlocksForProfile: (
     profileName: string,
     libraryBlocks: Block[],
@@ -655,7 +656,8 @@ const useBlocks = ({
         ? items.map((block) => (block.id === nextBlock.id ? nextBlock : block))
         : [...items, nextBlock];
     const nextLibrary = updateList(libraryBlocks);
-    const nextActive = updateList(activeBlocks);
+    // When creating a new block, only add to library; when editing, update in both library and active
+    const nextActive = editingBlockId ? updateList(activeBlocks) : activeBlocks;
     setLibraryBlocksByProfile((prev) => ({
       ...prev,
       [selectedProfile]: nextLibrary,
@@ -944,7 +946,8 @@ const useBlocks = ({
   const renameCategory = (oldName: string, newName: string) => {
     if (!selectedProfile) return;
     const trimmed = newName.trim();
-    if (!trimmed || (trimmed !== oldName && categories.includes(trimmed))) return;
+    if (!trimmed || (trimmed !== oldName && categories.includes(trimmed)))
+      return;
     const nextCategories = categories.map((c) => (c === oldName ? trimmed : c));
     const updateBlockCategory = (block: Block) =>
       (block.category ?? "").trim() === oldName
@@ -1037,6 +1040,32 @@ const useBlocks = ({
     });
   };
 
+  const removeBlockFromActive = useCallback(
+    (blockId: string) => {
+      moveBlock(blockId, "active", "library");
+    },
+    [moveBlock],
+  );
+
+  const clearActiveBlocks = useCallback(() => {
+    if (!selectedProfile || activeBlocks.length === 0) {
+      return;
+    }
+    setActiveBlocksByProfile((prev) => ({
+      ...prev,
+      [selectedProfile]: [],
+    }));
+    updateBlocks(selectedProfile, {
+      libraryBlocks,
+      activeBlocks: [],
+      categories,
+    }).catch((error) => {
+      if (import.meta.env.DEV) {
+        console.error("[blocks] failed to clear active blocks", error);
+      }
+    });
+  }, [selectedProfile, activeBlocks.length, libraryBlocks, categories]);
+
   return {
     libraryBlocks,
     activeBlocks,
@@ -1081,12 +1110,14 @@ const useBlocks = ({
     handleDragEnd,
     handlePointerDown,
     removeLibraryBlock,
+    clearActiveBlocks,
     replaceBlocksForProfile,
     categories,
     addCategory,
     renameCategory,
     deleteCategory,
     moveBlockToCategory,
+    removeBlockFromActive,
   };
 };
 

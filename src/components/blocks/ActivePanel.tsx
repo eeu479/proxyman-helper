@@ -11,7 +11,8 @@ type ActivePanelProps = {
   onDragStart: (blockId: string) => DragEventHandler<HTMLDivElement>;
   onDragEnd: () => void;
   onPointerDown: (blockId: string) => PointerEventHandler<HTMLDivElement>;
-  onEditBlock: (blockId: string) => void;
+  onRemoveFromActive: (blockId: string) => void;
+  onClearActive: () => void;
   onSelectVariant: (blockId: string, variantId: string) => void;
 };
 
@@ -24,14 +25,29 @@ const ActivePanel = ({
   onDragStart,
   onDragEnd,
   onPointerDown,
-  onEditBlock,
+  onRemoveFromActive,
+  onClearActive,
   onSelectVariant,
 }: ActivePanelProps) => {
   return (
     <section className="panel panel--active">
       <header className="panel__header">
-        <h2>Active Blocks</h2>
-        <span className="panel__hint">Drop here to build the flow.</span>
+        <div>
+          <h2>Active Blocks</h2>
+          <span className="panel__hint">Drop here to build the flow.</span>
+        </div>
+        {blocks.length > 0 ? (
+          <div className="panel__header-actions">
+            <button
+              type="button"
+              className="panel__action panel__action--danger"
+              onClick={onClearActive}
+              aria-label="Clear all active blocks"
+            >
+              Clear
+            </button>
+          </div>
+        ) : null}
       </header>
       <div
         className="panel__body"
@@ -54,7 +70,7 @@ const ActivePanel = ({
                 onDragStart={onDragStart(block.id)}
                 onDragEnd={onDragEnd}
                 onPointerDown={onPointerDown(block.id)}
-                onEdit={() => onEditBlock(block.id)}
+                onRemoveFromActive={() => onRemoveFromActive(block.id)}
                 onSelectVariant={(variantId) =>
                   onSelectVariant(block.id, variantId)
                 }

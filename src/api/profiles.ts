@@ -1,5 +1,5 @@
-import type { Profile } from "../types/profile";
 import type SubProfile from "../../interfaces/subProfile";
+import type { Profile } from "../types/profile";
 
 const DEFAULT_API_BASE = "http://127.0.0.1:3000";
 const API_BASE = import.meta.env.VITE_LOCAL_PROXY_BASE_URL ?? DEFAULT_API_BASE;
@@ -38,7 +38,11 @@ type CreateProfilePayload = {
   params?: string[];
 };
 
-export const createProfile = async ({ name, baseUrl, params }: CreateProfilePayload) => {
+export const createProfile = async ({
+  name,
+  baseUrl,
+  params,
+}: CreateProfilePayload) => {
   const response = await fetch(`${API_BASE}/api/profiles`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -60,7 +64,7 @@ type UpdateProfilePayload = {
 
 export const updateProfile = async (
   currentName: string,
-  { name, baseUrl, params }: UpdateProfilePayload
+  { name, baseUrl, params }: UpdateProfilePayload,
 ) => {
   const response = await fetch(
     `${API_BASE}/api/profiles/${encodeURIComponent(currentName)}`,
@@ -72,10 +76,18 @@ export const updateProfile = async (
         baseUrl,
         params,
       }),
-    }
+    },
   );
   await ensureOk(response);
   return (await response.json()) as Profile;
+};
+
+export const deleteProfile = async (profileName: string) => {
+  const response = await fetch(
+    `${API_BASE}/api/profiles/${encodeURIComponent(profileName)}`,
+    { method: "DELETE" },
+  );
+  await ensureOk(response);
 };
 
 type ActiveProfileResponse = {
@@ -103,7 +115,7 @@ type SubProfileParams = Record<string, string>;
 export const createSubProfile = async (
   profileName: string,
   name: string,
-  params?: SubProfileParams
+  params?: SubProfileParams,
 ) => {
   const response = await fetch(
     `${API_BASE}/api/profiles/${encodeURIComponent(profileName)}/subprofiles`,
@@ -114,7 +126,7 @@ export const createSubProfile = async (
         name,
         params: params && Object.keys(params).length > 0 ? params : undefined,
       }),
-    }
+    },
   );
   await ensureOk(response);
   return (await response.json()) as SubProfile;
@@ -123,18 +135,31 @@ export const createSubProfile = async (
 export const updateSubProfile = async (
   profileName: string,
   subprofileName: string,
-  payload: { name?: string; params?: SubProfileParams }
+  payload: { name?: string; params?: SubProfileParams },
 ) => {
   const response = await fetch(
     `${API_BASE}/api/profiles/${encodeURIComponent(
-      profileName
+      profileName,
     )}/subprofiles/${encodeURIComponent(subprofileName)}`,
     {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
-    }
+    },
   );
   await ensureOk(response);
   return (await response.json()) as SubProfile;
+};
+
+export const deleteSubProfile = async (
+  profileName: string,
+  subprofileName: string,
+) => {
+  const response = await fetch(
+    `${API_BASE}/api/profiles/${encodeURIComponent(
+      profileName,
+    )}/subprofiles/${encodeURIComponent(subprofileName)}`,
+    { method: "DELETE" },
+  );
+  await ensureOk(response);
 };

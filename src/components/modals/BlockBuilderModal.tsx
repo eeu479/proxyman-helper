@@ -10,7 +10,6 @@ type BlockBuilderModalProps = {
   builderMethod: string;
   builderPath: string;
   builderDescription: string;
-  builderCategory: string;
   builderResponseTemplate: string;
   builderResponseHeaders: { id: string; key: string; value: string }[];
   builderTemplateValues: TemplateValue[];
@@ -26,7 +25,6 @@ type BlockBuilderModalProps = {
   onChangeMethod: (value: string) => void;
   onChangePath: (value: string) => void;
   onChangeDescription: (value: string) => void;
-  onChangeCategory: (value: string) => void;
   onChangeResponseTemplate: (value: string) => void;
   onSelectTemplateVariant: (value: string) => void;
   onAddTemplateVariant: (name?: string) => void;
@@ -55,7 +53,6 @@ const BlockBuilderModal = ({
   builderMethod,
   builderPath,
   builderDescription,
-  builderCategory,
   builderResponseTemplate,
   builderResponseHeaders,
   builderTemplateValues,
@@ -67,7 +64,6 @@ const BlockBuilderModal = ({
   onChangeMethod,
   onChangePath,
   onChangeDescription,
-  onChangeCategory,
   onChangeResponseTemplate,
   onSelectTemplateVariant,
   onAddTemplateVariant,
@@ -192,16 +188,6 @@ const BlockBuilderModal = ({
               onChange={(event) => onChangeDescription(event.target.value)}
               placeholder="Optional summary for this request"
               rows={3}
-            />
-          </label>
-          <label className="modal__label">
-            Category
-            <input
-              className="modal__input"
-              type="text"
-              value={builderCategory}
-              onChange={(event) => onChangeCategory(event.target.value)}
-              placeholder="e.g. Auth, Users"
             />
           </label>
           <div

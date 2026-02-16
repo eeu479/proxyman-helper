@@ -2,6 +2,7 @@ import type { Dispatch, FormEvent, SetStateAction } from "react";
 import { useEffect, useState } from "react";
 import {
   createProfile,
+  deleteProfile as deleteProfileApi,
   fetchActiveProfile,
   fetchProfiles,
   setActiveProfile,
@@ -30,6 +31,8 @@ type UseProfilesReturn = {
   editProfileOriginalName: string;
   createProfileError: string;
   updateProfileError: string;
+  deleteProfileError: string;
+  isDeletingProfile: boolean;
   isCreateProfileModalOpen: boolean;
   setIsCreateProfileModalOpen: Dispatch<SetStateAction<boolean>>;
   setNewProfileName: Dispatch<SetStateAction<string>>;
@@ -43,14 +46,15 @@ type UseProfilesReturn = {
   openCreateProfileModal: () => void;
   handleAddProfile: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   handleUpdateProfile: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  handleDeleteProfile: (profileName: string) => Promise<void>;
   addProfileParam: (
     param: string,
     setParams: Dispatch<SetStateAction<string[]>>,
-    setInput: Dispatch<SetStateAction<string>>
+    setInput: Dispatch<SetStateAction<string>>,
   ) => void;
   removeProfileParam: (
     value: string,
-    setParams: Dispatch<SetStateAction<string[]>>
+    setParams: Dispatch<SetStateAction<string[]>>,
   ) => void;
 };
 
@@ -73,7 +77,10 @@ const useProfiles = (): UseProfilesReturn => {
   const [editProfileOriginalName, setEditProfileOriginalName] = useState("");
   const [createProfileError, setCreateProfileError] = useState("");
   const [updateProfileError, setUpdateProfileError] = useState("");
-  const [isCreateProfileModalOpen, setIsCreateProfileModalOpen] = useState(false);
+  const [deleteProfileError, setDeleteProfileError] = useState("");
+  const [isDeletingProfile, setIsDeletingProfile] = useState(false);
+  const [isCreateProfileModalOpen, setIsCreateProfileModalOpen] =
+    useState(false);
 
   useEffect(() => {
     let isActive = true;
@@ -95,7 +102,10 @@ const useProfiles = (): UseProfilesReturn => {
             return;
           }
           const activeName = active.name ?? "";
-          if (activeName && data.some((profile) => profile.name === activeName)) {
+          if (
+            activeName &&
+            data.some((profile) => profile.name === activeName)
+          ) {
             nextSelection = activeName;
           }
         } catch (error) {
@@ -103,7 +113,9 @@ const useProfiles = (): UseProfilesReturn => {
             return;
           }
           setActiveProfileError(
-            error instanceof Error ? error.message : "Unable to load active profile."
+            error instanceof Error
+              ? error.message
+              : "Unable to load active profile.",
           );
         }
         setSelectedProfile((prev) => prev || nextSelection);
@@ -112,7 +124,7 @@ const useProfiles = (): UseProfilesReturn => {
           return;
         }
         setProfilesError(
-          error instanceof Error ? error.message : "Unable to load profiles."
+          error instanceof Error ? error.message : "Unable to load profiles.",
         );
       } finally {
         if (isActive) {
@@ -154,7 +166,9 @@ const useProfiles = (): UseProfilesReturn => {
           return;
         }
         setActiveProfileError(
-          error instanceof Error ? error.message : "Unable to set active profile."
+          error instanceof Error
+            ? error.message
+            : "Unable to set active profile.",
         );
       });
     return () => {
@@ -207,7 +221,7 @@ const useProfiles = (): UseProfilesReturn => {
       setIsCreateProfileModalOpen(false);
     } catch (error) {
       setCreateProfileError(
-        error instanceof Error ? error.message : "Unable to create profile."
+        error instanceof Error ? error.message : "Unable to create profile.",
       );
     } finally {
       setIsSavingProfile(false);
@@ -217,7 +231,7 @@ const useProfiles = (): UseProfilesReturn => {
   const addProfileParam = (
     param: string,
     setParams: Dispatch<SetStateAction<string[]>>,
-    setInput: Dispatch<SetStateAction<string>>
+    setInput: Dispatch<SetStateAction<string>>,
   ) => {
     const trimmed = param.trim();
     if (!trimmed) {
@@ -230,7 +244,7 @@ const useProfiles = (): UseProfilesReturn => {
 
   const removeProfileParam = (
     value: string,
-    setParams: Dispatch<SetStateAction<string[]>>
+    setParams: Dispatch<SetStateAction<string[]>>,
   ) => {
     setParams((prev) => prev.filter((item) => item !== value));
   };
@@ -256,18 +270,38 @@ const useProfiles = (): UseProfilesReturn => {
       });
       setProfiles((prev) =>
         prev.map((profile) =>
-          profile.name === editProfileOriginalName ? updated : profile
-        )
+          profile.name === editProfileOriginalName ? updated : profile,
+        ),
       );
       if (selectedProfile === editProfileOriginalName) {
         setSelectedProfile(updated.name);
       }
     } catch (error) {
       setUpdateProfileError(
-        error instanceof Error ? error.message : "Unable to update profile."
+        error instanceof Error ? error.message : "Unable to update profile.",
       );
     } finally {
       setIsUpdatingProfile(false);
+    }
+  };
+
+  const handleDeleteProfile = async (profileName: string) => {
+    if (!profileName) {
+      return;
+    }
+    setIsDeletingProfile(true);
+    setDeleteProfileError("");
+    try {
+      await deleteProfileApi(profileName);
+      const remaining = profiles.filter((p) => p.name !== profileName);
+      setProfiles(remaining);
+      setSelectedProfile(remaining[0]?.name ?? "");
+    } catch (error) {
+      setDeleteProfileError(
+        error instanceof Error ? error.message : "Unable to delete profile.",
+      );
+    } finally {
+      setIsDeletingProfile(false);
     }
   };
 
@@ -292,6 +326,8 @@ const useProfiles = (): UseProfilesReturn => {
     editProfileOriginalName,
     createProfileError,
     updateProfileError,
+    deleteProfileError,
+    isDeletingProfile,
     isCreateProfileModalOpen,
     setIsCreateProfileModalOpen,
     setNewProfileName,
@@ -305,6 +341,7 @@ const useProfiles = (): UseProfilesReturn => {
     openCreateProfileModal,
     handleAddProfile,
     handleUpdateProfile,
+    handleDeleteProfile,
     addProfileParam,
     removeProfileParam,
   };

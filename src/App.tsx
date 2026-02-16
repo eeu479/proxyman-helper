@@ -64,8 +64,11 @@ const App = () => {
     openCreateProfileModal,
     handleAddProfile,
     handleUpdateProfile,
+    handleDeleteProfile,
     addProfileParam,
     removeProfileParam,
+    deleteProfileError,
+    isDeletingProfile,
   } = useProfiles();
 
   const {
@@ -98,6 +101,7 @@ const App = () => {
     updateSubprofileValueForKey,
     handleCreateSubprofile,
     handleUpdateSubprofile,
+    deleteSubprofile,
   } = useSubprofiles({ profiles, selectedProfile, setProfiles });
 
   const {
@@ -108,7 +112,6 @@ const App = () => {
     builderMethod,
     builderPath,
     builderDescription,
-    builderCategory,
     builderResponseTemplate,
     builderResponseHeaders,
     builderTemplateValues,
@@ -120,7 +123,6 @@ const App = () => {
     setBuilderMethod,
     setBuilderPath,
     setBuilderDescription,
-    setBuilderCategory,
     setBuilderResponseTemplate,
     setBuilderActiveVariantId,
     addTemplateVariant,
@@ -144,6 +146,8 @@ const App = () => {
     removeLibraryBlock,
     replaceBlocksForProfile,
     editBlock,
+    removeBlockFromActive,
+    clearActiveBlocks,
     setBlockActiveVariant,
     categories,
     addCategory,
@@ -297,9 +301,21 @@ const App = () => {
             onSave={handleUpdateProfile}
             onAddSubprofile={openCreateSubprofileModal}
             onEditSubprofile={openEditSubprofileModal}
+            onDeleteSubprofile={async (profileName, subprofileName) => {
+              await deleteSubprofile(profileName, subprofileName);
+              if (
+                selectedProfile === profileName &&
+                selectedSubprofile === subprofileName
+              ) {
+                setSelectedSubprofile("");
+              }
+            }}
             onExportBlocks={handleExportBlocks}
             onImportBlocks={handleImportBlocks}
             importBlocksMessage={importBlocksMessage}
+            onDeleteProfile={handleDeleteProfile}
+            deleteProfileError={deleteProfileError}
+            isDeletingProfile={isDeletingProfile}
           />
         ) : (
           <>
@@ -333,7 +349,8 @@ const App = () => {
               onDragStart={(blockId) => handleDragStart(blockId, "active")}
               onDragEnd={handleDragEnd}
               onPointerDown={(blockId) => handlePointerDown(blockId, "active")}
-              onEditBlock={editBlock}
+              onRemoveFromActive={removeBlockFromActive}
+              onClearActive={clearActiveBlocks}
               onSelectVariant={setBlockActiveVariant}
             />
           </>
@@ -347,7 +364,6 @@ const App = () => {
         builderMethod={builderMethod}
         builderPath={builderPath}
         builderDescription={builderDescription}
-        builderCategory={builderCategory}
         builderResponseTemplate={builderResponseTemplate}
         builderResponseHeaders={builderResponseHeaders}
         builderTemplateValues={builderTemplateValues}
@@ -359,7 +375,6 @@ const App = () => {
         onChangeMethod={setBuilderMethod}
         onChangePath={setBuilderPath}
         onChangeDescription={setBuilderDescription}
-        onChangeCategory={setBuilderCategory}
         onChangeResponseTemplate={setBuilderResponseTemplate}
         onSelectTemplateVariant={setBuilderActiveVariantId}
         onAddTemplateVariant={addTemplateVariant}

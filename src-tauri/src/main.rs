@@ -317,7 +317,7 @@ async fn run_server(app_handle: tauri::AppHandle) -> Result<(), String> {
     .route("/api/profiles", get(list_profiles).post(create_profile))
     .route(
       "/api/profiles/:profile_name",
-      get(get_profile).put(update_profile),
+      get(get_profile).put(update_profile).delete(delete_profile),
     )
     .route(
       "/api/profiles/:profile_name/subprofiles",
@@ -325,7 +325,7 @@ async fn run_server(app_handle: tauri::AppHandle) -> Result<(), String> {
     )
     .route(
       "/api/profiles/:profile_name/subprofiles/:subprofile_name",
-      put(update_sub_profile),
+      put(update_sub_profile).delete(delete_sub_profile),
     )
     .route(
       "/api/profiles/:profile_name/requests",
@@ -539,6 +539,38 @@ async fn update_profile(
   Json(updated_profile).into_response()
 }
 
+async fn delete_profile(
+  State(state): State<AppState>,
+  Path(profile_name): Path<String>,
+) -> Response {
+  let mut store = read_store(&state).await;
+  let initial_len = store.profiles.len();
+  let was_active = state
+    .active_profile
+    .lock()
+    .await
+    .as_deref()
+    == Some(profile_name.as_str());
+  store.profiles.retain(|p| p.name != profile_name);
+  if store.profiles.len() == initial_len {
+    return (StatusCode::NOT_FOUND, Json(json!({ "error": "Profile not found" })))
+      .into_response();
+  }
+  if was_active {
+    let next_active = store.profiles.first().map(|p| p.name.clone());
+    store.active_profile = next_active.clone();
+    *state.active_profile.lock().await = next_active;
+  }
+  if let Err(error) = write_store(&state, &store).await {
+    return (
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(json!({ "error": error })),
+    )
+      .into_response();
+  }
+  (StatusCode::NO_CONTENT, ()).into_response()
+}
+
 async fn create_sub_profile(
   State(state): State<AppState>,
   Path(profile_name): Path<String>,
@@ -660,6 +692,44 @@ async fn update_sub_profile(
   }
 
   Json(updated_subprofile).into_response()
+}
+
+async fn delete_sub_profile(
+  State(state): State<AppState>,
+  Path((profile_name, subprofile_name)): Path<(String, String)>,
+) -> Response {
+  let mut store = read_store(&state).await;
+  let Some(profile) = store
+    .profiles
+    .iter_mut()
+    .find(|profile| profile.name == profile_name)
+  else {
+    return (StatusCode::NOT_FOUND, Json(json!({ "error": "Profile not found" })))
+      .into_response();
+  };
+
+  let initial_len = profile.sub_profiles.len();
+  profile
+    .sub_profiles
+    .retain(|sub| sub.name != subprofile_name);
+
+  if profile.sub_profiles.len() == initial_len {
+    return (
+      StatusCode::NOT_FOUND,
+      Json(json!({ "error": "SubProfile not found" })),
+    )
+      .into_response();
+  }
+
+  if let Err(error) = write_store(&state, &store).await {
+    return (
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(json!({ "error": error })),
+    )
+      .into_response();
+  }
+
+  StatusCode::NO_CONTENT.into_response()
 }
 
 async fn create_request(

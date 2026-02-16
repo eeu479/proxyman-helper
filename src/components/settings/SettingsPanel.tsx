@@ -19,9 +19,13 @@ type SettingsPanelProps = {
   onSave: (event: FormEvent<HTMLFormElement>) => void;
   onAddSubprofile: () => void;
   onEditSubprofile: (profileName: string, subprofileName: string) => void;
+  onDeleteSubprofile: (profileName: string, subprofileName: string) => void;
   onExportBlocks: () => void;
   onImportBlocks: (file: File) => Promise<void>;
   importBlocksMessage: string | null;
+  onDeleteProfile: (profileName: string) => Promise<void>;
+  deleteProfileError: string;
+  isDeletingProfile: boolean;
 };
 
 const SettingsPanel = ({
@@ -41,9 +45,13 @@ const SettingsPanel = ({
   onSave,
   onAddSubprofile,
   onEditSubprofile,
+  onDeleteSubprofile,
   onExportBlocks,
   onImportBlocks,
   importBlocksMessage,
+  onDeleteProfile,
+  deleteProfileError,
+  isDeletingProfile,
 }: SettingsPanelProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const selectedProfileData =
@@ -179,13 +187,27 @@ const SettingsPanel = ({
               subprofiles.map((sub) => (
                 <div key={sub.name} className="settings__subprofile-row">
                   <span className="settings__subprofile-name">{sub.name}</span>
-                  <button
-                    className="settings__button settings__button--edit"
-                    type="button"
-                    onClick={() => onEditSubprofile(selectedProfile, sub.name)}
-                  >
-                    Edit
-                  </button>
+                  <div className="settings__subprofile-actions">
+                    <button
+                      className="settings__button settings__button--edit"
+                      type="button"
+                      onClick={() =>
+                        onEditSubprofile(selectedProfile, sub.name)
+                      }
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="settings__button settings__button--danger"
+                      type="button"
+                      onClick={() =>
+                        onDeleteSubprofile(selectedProfile, sub.name)
+                      }
+                      aria-label={`Delete ${sub.name}`}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -239,6 +261,9 @@ const SettingsPanel = ({
         {updateProfileError ? (
           <div className="settings__error">{updateProfileError}</div>
         ) : null}
+        {deleteProfileError ? (
+          <div className="settings__error">{deleteProfileError}</div>
+        ) : null}
 
         <div className="settings__actions">
           <button
@@ -247,6 +272,31 @@ const SettingsPanel = ({
             disabled={isUpdatingProfile}
           >
             {isUpdatingProfile ? "Saving..." : "Save"}
+          </button>
+        </div>
+
+        <div className="settings__section settings__section--danger">
+          <span className="settings__label">Delete profile</span>
+          <p className="settings__blocks-hint">
+            Permanently remove this profile and all its blocks, subprofiles, and
+            requests.
+          </p>
+          <button
+            className="settings__button settings__button--danger"
+            type="button"
+            disabled={isDeletingProfile}
+            onClick={() => {
+              if (
+                selectedProfileData &&
+                window.confirm(
+                  `Delete profile "${selectedProfileData.name}"? This cannot be undone.`,
+                )
+              ) {
+                onDeleteProfile(selectedProfile);
+              }
+            }}
+          >
+            {isDeletingProfile ? "Deleting..." : "Delete profile"}
           </button>
         </div>
       </form>

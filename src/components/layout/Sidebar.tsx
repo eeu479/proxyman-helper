@@ -92,10 +92,8 @@ const Sidebar = ({
           )}
         </select>
       </div>
+      <div className="sidebar_spacer" />
       <div className="sidebar__section">
-        <div className="sidebar__section-header">
-          <h2 className="sidebar__title">Views</h2>
-        </div>
         <div className="sidebar__nav">
           <button
             className={`sidebar__nav-button ${activeView === "builder" ? "is-active" : ""}`}
@@ -125,8 +123,12 @@ const Sidebar = ({
           className="sidebar__theme-toggle"
           type="button"
           onClick={onToggleTheme}
-          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          aria-label={
+            theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+          }
+          title={
+            theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+          }
         >
           {theme === "dark" ? "☀️" : "🌙"}
         </button>

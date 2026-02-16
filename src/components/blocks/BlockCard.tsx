@@ -12,6 +12,7 @@ type BlockCardProps = {
   onDelete?: () => void;
   onEdit?: () => void;
   onExport?: () => void;
+  onRemoveFromActive?: () => void;
   onSelectVariant?: (variantId: string) => void;
 };
 
@@ -34,6 +35,7 @@ const BlockCard = ({
   onDelete,
   onEdit,
   onExport,
+  onRemoveFromActive,
   onSelectVariant,
 }: BlockCardProps) => {
   const method = block.method.toUpperCase();
@@ -78,45 +80,61 @@ const BlockCard = ({
           </span>
           <span className="block__name">{block.name}</span>
           <div className="block__actions">
-            {onEdit ? (
+            {onRemoveFromActive ? (
               <button
-                className="block__action-btn block__action-btn--edit"
+                className="block__action-btn block__action-btn--remove"
                 type="button"
-                onClick={onEdit}
+                onClick={onRemoveFromActive}
                 onPointerDown={stopDrag}
                 onDragStart={stopDrag}
-                aria-label={`Edit ${block.name}`}
-                title="Edit"
+                aria-label={`Remove ${block.name} from active`}
+                title="Remove from active"
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
-            ) : null}
-            {onExport ? (
-              <button
-                className="block__action-btn block__action-btn--export"
-                type="button"
-                onClick={onExport}
-                onPointerDown={stopDrag}
-                onDragStart={stopDrag}
-                aria-label={`Export ${block.name}`}
-                title="Export"
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              </button>
-            ) : null}
-            {onDelete ? (
-              <button
-                className="block__action-btn block__action-btn--delete"
-                type="button"
-                onClick={onDelete}
-                onPointerDown={stopDrag}
-                onDragStart={stopDrag}
-                aria-label={`Delete ${block.name}`}
-                title="Delete"
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-              </button>
-            ) : null}
+            ) : (
+              <>
+                {onEdit ? (
+                  <button
+                    className="block__action-btn block__action-btn--edit"
+                    type="button"
+                    onClick={onEdit}
+                    onPointerDown={stopDrag}
+                    onDragStart={stopDrag}
+                    aria-label={`Edit ${block.name}`}
+                    title="Edit"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                  </button>
+                ) : null}
+                {onExport ? (
+                  <button
+                    className="block__action-btn block__action-btn--export"
+                    type="button"
+                    onClick={onExport}
+                    onPointerDown={stopDrag}
+                    onDragStart={stopDrag}
+                    aria-label={`Export ${block.name}`}
+                    title="Export"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  </button>
+                ) : null}
+                {onDelete ? (
+                  <button
+                    className="block__action-btn block__action-btn--delete"
+                    type="button"
+                    onClick={onDelete}
+                    onPointerDown={stopDrag}
+                    onDragStart={stopDrag}
+                    aria-label={`Delete ${block.name}`}
+                    title="Delete"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  </button>
+                ) : null}
+              </>
+            )}
           </div>
         </div>
         {compact ? (
