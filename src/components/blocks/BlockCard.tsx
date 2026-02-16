@@ -120,7 +120,32 @@ const BlockCard = ({
           </div>
         </div>
         {compact ? (
-          <span className="block__path">{block.path}</span>
+          <>
+            <span className="block__path">{block.path}</span>
+            {block.templateVariants.length > 0 ? (
+              <div className="block__variant block__variant--compact">
+                <span className="block__variant-label">variant</span>
+                {onSelectVariant ? (
+                  <select
+                    className="block__variant-select"
+                    value={activeVariant?.id ?? ""}
+                    onChange={(event) => onSelectVariant(event.target.value)}
+                    onPointerDown={stopDrag}
+                  >
+                    {block.templateVariants.map((variant) => (
+                      <option key={variant.id} value={variant.id}>
+                        {variant.name || "Untitled"}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="block__variant-name">
+                    {activeVariant?.name || "Untitled"}
+                  </span>
+                )}
+              </div>
+            ) : null}
+          </>
         ) : (
           <>
             <div className="block__desc">{block.description}</div>

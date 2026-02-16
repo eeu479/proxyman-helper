@@ -774,6 +774,31 @@ body[data-theme="light"] .sidebar__select {
   padding: 2px;
 }
 
+.block--compact .block__variant--compact {
+  padding-top: 2px;
+  gap: 6px;
+  font-size: 10px;
+}
+
+.block--compact .block__variant--compact .block__variant-label {
+  font-size: 8px;
+}
+
+.block--compact .block__variant--compact .block__variant-select {
+  padding: 2px 4px;
+  font-size: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.block--compact .block__variant--compact .block__variant-name {
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
 /* ── Expanded mode (non-compact, used in ActivePanel) ── */
 
 .block__desc {
