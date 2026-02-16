@@ -103,6 +103,7 @@ const App = () => {
     builderResponseTemplate,
     builderResponseHeaders,
     builderTemplateValues,
+    isEditingBlock,
     setIsBuilderOpen,
     setBuilderName,
     setBuilderMethod,
@@ -125,6 +126,7 @@ const App = () => {
     handleDragEnd,
     handlePointerDown,
     removeLibraryBlock,
+    editBlock,
   } = useBlocks({ profiles, selectedProfile });
 
 
@@ -156,6 +158,7 @@ const App = () => {
               onDragEnd={handleDragEnd}
               onPointerDown={(blockId) => handlePointerDown(blockId, "library")}
               onDeleteBlock={removeLibraryBlock}
+              onEditBlock={editBlock}
             />
             <ActivePanel
               blocks={activeBlocks}
@@ -166,12 +169,14 @@ const App = () => {
               onDragStart={(blockId) => handleDragStart(blockId, "active")}
               onDragEnd={handleDragEnd}
               onPointerDown={(blockId) => handlePointerDown(blockId, "active")}
+              onEditBlock={editBlock}
             />
           </>
         )}
       </main>
       <BlockBuilderModal
         isOpen={isBuilderOpen}
+        isEditing={isEditingBlock}
         builderName={builderName}
         builderMethod={builderMethod}
         builderPath={builderPath}

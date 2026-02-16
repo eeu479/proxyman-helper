@@ -5,6 +5,7 @@ import Modal from "./Modal";
 
 type BlockBuilderModalProps = {
   isOpen: boolean;
+  isEditing: boolean;
   builderName: string;
   builderMethod: string;
   builderPath: string;
@@ -29,6 +30,7 @@ type BlockBuilderModalProps = {
 
 const BlockBuilderModal = ({
   isOpen,
+  isEditing,
   builderName,
   builderMethod,
   builderPath,
@@ -95,7 +97,7 @@ const BlockBuilderModal = ({
 
   return (
     <Modal
-      title="Block Builder"
+      title={isEditing ? "Edit Block" : "Block Builder"}
       isOpen={isOpen}
       onClose={onClose}
       closeLabel="Close block builder"
@@ -287,7 +289,7 @@ const BlockBuilderModal = ({
             Cancel
           </button>
           <button className="panel__action" type="submit">
-            Save Block
+            {isEditing ? "Update Block" : "Save Block"}
           </button>
         </div>
       </form>

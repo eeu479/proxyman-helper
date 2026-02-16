@@ -22,6 +22,7 @@ type UseBlocksReturn = {
   builderResponseTemplate: string;
   builderResponseHeaders: { id: string; key: string; value: string }[];
   builderTemplateValues: { id: string; key: string; value: string }[];
+  isEditingBlock: boolean;
   setIsBuilderOpen: (isOpen: boolean) => void;
   setBuilderName: (value: string) => void;
   setBuilderMethod: (value: string) => void;
@@ -35,6 +36,7 @@ type UseBlocksReturn = {
   addTemplateValue: (key?: string, value?: string) => void;
   updateTemplateValue: (id: string, field: "key" | "value", value: string) => void;
   removeTemplateValue: (id: string) => void;
+  editBlock: (blockId: string) => void;
   closeBuilder: () => void;
   handleCreateBlock: (event: FormEvent<HTMLFormElement>) => void;
   allowDrop: (event: DragEvent<HTMLDivElement>) => void;
@@ -73,6 +75,7 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
   const [builderTemplateValues, setBuilderTemplateValues] = useState<
     { id: string; key: string; value: string }[]
   >([]);
+  const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
   const dragRef = useRef<{ blockId: string; source: "library" | "active" } | null>(
     null
   );
@@ -421,6 +424,7 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     setBuilderResponseTemplate("");
     setBuilderResponseHeaders([]);
     setBuilderTemplateValues([]);
+    setEditingBlockId(null);
   };
 
   const closeBuilder = () => {
@@ -439,44 +443,57 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
       return;
     }
 
+    const responseHeaders = builderResponseHeaders.reduce<Record<string, string>>((acc, item) => {
+      const key = item.key.trim();
+      if (!key) {
+        return acc;
+      }
+      acc[key] = item.value.trim();
+      return acc;
+    }, {});
+    const templateValues = builderTemplateValues
+      .map((item) => ({
+        ...item,
+        key: item.key.trim(),
+        value: item.value.trim(),
+      }))
+      .filter((item) => item.key.length > 0);
+
     const nextBlock: Block = {
-      id: `block-${Date.now()}`,
+      id: editingBlockId ?? `block-${Date.now()}`,
       name: trimmedName,
       method: builderMethod,
       path: trimmedPath,
       description: `${builderMethod} ${trimmedPath}`,
       responseTemplate: builderResponseTemplate.trim(),
-      responseHeaders: builderResponseHeaders.reduce<Record<string, string>>((acc, item) => {
-        const key = item.key.trim();
-        if (!key) {
-          return acc;
-        }
-        acc[key] = item.value.trim();
-        return acc;
-      }, {}),
-      templateValues: builderTemplateValues
-        .map((item) => ({
-          ...item,
-          key: item.key.trim(),
-          value: item.value.trim(),
-        }))
-        .filter((item) => item.key.length > 0),
+      responseHeaders,
+      templateValues,
     };
 
     if (builderDescription.trim()) {
       nextBlock.description = builderDescription.trim();
     }
 
+    const updateList = (items: Block[]) =>
+      items.some((block) => block.id === nextBlock.id)
+        ? items.map((block) => (block.id === nextBlock.id ? nextBlock : block))
+        : [...items, nextBlock];
+    const nextLibrary = updateList(libraryBlocks);
+    const nextActive = updateList(activeBlocks);
     setLibraryBlocksByProfile((prev) => ({
       ...prev,
-      [selectedProfile]: [...(prev[selectedProfile] ?? []), nextBlock],
+      [selectedProfile]: nextLibrary,
+    }));
+    setActiveBlocksByProfile((prev) => ({
+      ...prev,
+      [selectedProfile]: nextActive,
     }));
     updateBlocks(selectedProfile, {
-      libraryBlocks: [...libraryBlocks, nextBlock],
-      activeBlocks,
+      libraryBlocks: nextLibrary,
+      activeBlocks: nextActive,
     }).catch((error) => {
       if (import.meta.env.DEV) {
-        console.error("[blocks] failed to persist new block", error);
+        console.error("[blocks] failed to persist block", error);
       }
     });
     closeBuilder();
@@ -552,6 +569,34 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
       }))
     );
     setBuilderTemplateValues([]);
+    setEditingBlockId(null);
+    setIsBuilderOpen(true);
+  };
+
+  const editBlock = (blockId: string) => {
+    const block = blockIndex.get(blockId);
+    if (!block) {
+      return;
+    }
+    setBuilderName(block.name);
+    setBuilderMethod(block.method);
+    setBuilderPath(block.path);
+    setBuilderDescription(block.description);
+    setBuilderResponseTemplate(block.responseTemplate);
+    setBuilderResponseHeaders(
+      Object.entries(block.responseHeaders ?? {}).map(([key, value], index) => ({
+        id: `header-${Date.now()}-${index}`,
+        key,
+        value,
+      }))
+    );
+    setBuilderTemplateValues(
+      block.templateValues.map((item, index) => ({
+        ...item,
+        id: item.id || `template-${Date.now()}-${index}`,
+      }))
+    );
+    setEditingBlockId(block.id);
     setIsBuilderOpen(true);
   };
 
@@ -566,6 +611,7 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     builderResponseTemplate,
     builderResponseHeaders,
     builderTemplateValues,
+    isEditingBlock: editingBlockId !== null,
     setIsBuilderOpen,
     setBuilderName,
     setBuilderMethod,
@@ -579,6 +625,7 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     addTemplateValue,
     updateTemplateValue,
     removeTemplateValue,
+    editBlock,
     closeBuilder,
     handleCreateBlock,
     allowDrop,

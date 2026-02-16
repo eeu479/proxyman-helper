@@ -9,6 +9,7 @@ type BlockCardProps = {
   onDragEnd?: DragEventHandler<HTMLDivElement>;
   onPointerDown?: PointerEventHandler<HTMLDivElement>;
   onDelete?: () => void;
+  onEdit?: () => void;
 };
 
 const BlockCard = ({
@@ -19,6 +20,7 @@ const BlockCard = ({
   onDragEnd,
   onPointerDown,
   onDelete,
+  onEdit,
 }: BlockCardProps) => {
   const cardClassName = className ? `block ${className}` : "block";
 
@@ -37,18 +39,32 @@ const BlockCard = ({
           </span>
           <span className="block__name">{block.name}</span>
         </div>
-        {onDelete ? (
-          <button
-            className="block__delete"
-            type="button"
-            onClick={onDelete}
-            onPointerDown={(event) => event.stopPropagation()}
-            onDragStart={(event) => event.stopPropagation()}
-            aria-label={`Delete ${block.name}`}
-          >
-            Delete
-          </button>
-        ) : null}
+        <div className="block__actions">
+          {onEdit ? (
+            <button
+              className="block__edit"
+              type="button"
+              onClick={onEdit}
+              onPointerDown={(event) => event.stopPropagation()}
+              onDragStart={(event) => event.stopPropagation()}
+              aria-label={`Edit ${block.name}`}
+            >
+              Edit
+            </button>
+          ) : null}
+          {onDelete ? (
+            <button
+              className="block__delete"
+              type="button"
+              onClick={onDelete}
+              onPointerDown={(event) => event.stopPropagation()}
+              onDragStart={(event) => event.stopPropagation()}
+              aria-label={`Delete ${block.name}`}
+            >
+              Delete
+            </button>
+          ) : null}
+        </div>
       </div>
       <div className="block__desc">{block.description}</div>
       {block.responseTemplate || block.templateValues.length > 0 ? (

@@ -370,13 +370,26 @@ code {
   gap: 10px;
 }
 
-.block__delete {
+.block__actions {
   margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.block__edit,
+.block__delete {
   border: none;
   background: transparent;
-  color: #f87171;
   cursor: pointer;
   font-size: 12px;
+}
+
+.block__edit {
+  color: #93c5fd;
+}
+
+.block__delete {
+  color: #f87171;
 }
 
 .block__method {
