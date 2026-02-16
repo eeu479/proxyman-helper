@@ -47,6 +47,8 @@ struct Profile {
   library_blocks: Vec<Block>,
   #[serde(default)]
   active_blocks: Vec<Block>,
+  #[serde(default)]
+  categories: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -93,6 +95,8 @@ struct Block {
   template_variants: Vec<TemplateVariant>,
   #[serde(default)]
   active_variant_id: Option<String>,
+  #[serde(default)]
+  category: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -130,6 +134,8 @@ struct BlocksPayload {
   library_blocks: Vec<Block>,
   #[serde(default)]
   active_blocks: Vec<Block>,
+  #[serde(default)]
+  categories: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -450,6 +456,7 @@ async fn create_profile(
     requests: Vec::new(),
     library_blocks: Vec::new(),
     active_blocks: Vec::new(),
+    categories: Vec::new(),
   };
   store.profiles.push(profile.clone());
 
@@ -718,6 +725,7 @@ async fn get_blocks(
   Json(BlocksPayload {
     library_blocks: profile.library_blocks,
     active_blocks: profile.active_blocks,
+    categories: profile.categories,
   })
   .into_response()
 }
@@ -739,6 +747,7 @@ async fn update_blocks(
 
   profile.library_blocks = input.library_blocks.clone();
   profile.active_blocks = input.active_blocks.clone();
+  profile.categories = input.categories.clone();
 
   if let Err(error) = write_store(&state, &store).await {
     return (
@@ -751,6 +760,7 @@ async fn update_blocks(
   Json(BlocksPayload {
     library_blocks: input.library_blocks,
     active_blocks: input.active_blocks,
+    categories: input.categories,
   })
   .into_response()
 }

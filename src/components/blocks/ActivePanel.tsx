@@ -43,19 +43,24 @@ const ActivePanel = ({
         {blocks.length === 0 ? (
           <div className="panel__empty">Drag blocks here.</div>
         ) : (
-          blocks.map((block) => (
-            <BlockCard
-              key={block.id}
-              block={block}
-              className="block--active"
-              draggable
-              onDragStart={onDragStart(block.id)}
-              onDragEnd={onDragEnd}
-              onPointerDown={onPointerDown(block.id)}
-              onEdit={() => onEditBlock(block.id)}
-              onSelectVariant={(variantId) => onSelectVariant(block.id, variantId)}
-            />
-          ))
+          <div className="panel__block-grid">
+            {blocks.map((block) => (
+              <BlockCard
+                key={block.id}
+                block={block}
+                compact
+                className="block--active"
+                draggable
+                onDragStart={onDragStart(block.id)}
+                onDragEnd={onDragEnd}
+                onPointerDown={onPointerDown(block.id)}
+                onEdit={() => onEditBlock(block.id)}
+                onSelectVariant={(variantId) =>
+                  onSelectVariant(block.id, variantId)
+                }
+              />
+            ))}
+          </div>
         )}
       </div>
       <div

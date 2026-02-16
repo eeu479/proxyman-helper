@@ -1,9 +1,13 @@
-import type { DragEvent, FormEvent, PointerEvent as ReactPointerEvent } from "react";
+import type {
+  DragEvent,
+  FormEvent,
+  PointerEvent as ReactPointerEvent,
+} from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchBlocks, updateBlocks } from "../api/blocks";
+import type { RequestLogEntry } from "../api/logs";
 import { initialLibrary } from "../data/initialData";
 import type { Block } from "../types/block";
-import type { RequestLogEntry } from "../api/logs";
 import type { Profile } from "../types/profile";
 
 type UseBlocksParams = {
@@ -19,10 +23,15 @@ type UseBlocksReturn = {
   builderMethod: string;
   builderPath: string;
   builderDescription: string;
+  builderCategory: string;
   builderResponseTemplate: string;
   builderResponseHeaders: { id: string; key: string; value: string }[];
   builderTemplateValues: { id: string; key: string; value: string }[];
-  builderTemplateVariants: { id: string; name: string; values: { id: string; key: string; value: string }[] }[];
+  builderTemplateVariants: {
+    id: string;
+    name: string;
+    values: { id: string; key: string; value: string }[];
+  }[];
   builderActiveVariantId: string | null;
   isEditingBlock: boolean;
   setIsBuilderOpen: (isOpen: boolean) => void;
@@ -30,17 +39,26 @@ type UseBlocksReturn = {
   setBuilderMethod: (value: string) => void;
   setBuilderPath: (value: string) => void;
   setBuilderDescription: (value: string) => void;
+  setBuilderCategory: (value: string) => void;
   setBuilderResponseTemplate: (value: string) => void;
   setBuilderActiveVariantId: (value: string | null) => void;
   addTemplateVariant: (name?: string) => void;
   removeTemplateVariant: (variantId: string) => void;
   updateTemplateVariantName: (variantId: string, value: string) => void;
   addResponseHeader: (key?: string, value?: string) => void;
-  updateResponseHeader: (id: string, field: "key" | "value", value: string) => void;
+  updateResponseHeader: (
+    id: string,
+    field: "key" | "value",
+    value: string,
+  ) => void;
   removeResponseHeader: (id: string) => void;
   openBuilderFromLog: (entry: RequestLogEntry) => void;
   addTemplateValue: (key?: string, value?: string) => void;
-  updateTemplateValue: (id: string, field: "key" | "value", value: string) => void;
+  updateTemplateValue: (
+    id: string,
+    field: "key" | "value",
+    value: string,
+  ) => void;
   removeTemplateValue: (id: string) => void;
   editBlock: (blockId: string) => void;
   setBlockActiveVariant: (blockId: string, variantId: string) => void;
@@ -50,31 +68,48 @@ type UseBlocksReturn = {
   handleDragEnter: (event: DragEvent<HTMLDivElement>) => void;
   handleDragStart: (
     blockId: string,
-    source: "library" | "active"
+    source: "library" | "active",
   ) => (event: DragEvent<HTMLDivElement>) => void;
   handleDrop: (
-    destination: "library" | "active"
+    destination: "library" | "active",
   ) => (event: DragEvent<HTMLDivElement>) => void;
   handleDragEnd: () => void;
   handlePointerDown: (
     blockId: string,
-    source: "library" | "active"
+    source: "library" | "active",
   ) => (event: ReactPointerEvent<HTMLDivElement>) => void;
   removeLibraryBlock: (blockId: string) => void;
+  replaceBlocksForProfile: (
+    profileName: string,
+    libraryBlocks: Block[],
+    activeBlocks: Block[],
+  ) => void;
+  categories: string[];
+  addCategory: (name: string) => void;
+  renameCategory: (oldName: string, newName: string) => void;
+  deleteCategory: (name: string) => void;
+  moveBlockToCategory: (blockId: string, category: string) => void;
 };
 
-const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksReturn => {
+const useBlocks = ({
+  profiles,
+  selectedProfile,
+}: UseBlocksParams): UseBlocksReturn => {
   const [libraryBlocksByProfile, setLibraryBlocksByProfile] = useState<
     Record<string, Block[]>
   >({});
   const [activeBlocksByProfile, setActiveBlocksByProfile] = useState<
     Record<string, Block[]>
   >({});
+  const [categoriesByProfile, setCategoriesByProfile] = useState<
+    Record<string, string[]>
+  >({});
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [builderName, setBuilderName] = useState("");
   const [builderMethod, setBuilderMethod] = useState("GET");
   const [builderPath, setBuilderPath] = useState("/api/");
   const [builderDescription, setBuilderDescription] = useState("");
+  const [builderCategory, setBuilderCategory] = useState("");
   const [builderResponseTemplate, setBuilderResponseTemplate] = useState("");
   const [builderResponseHeaders, setBuilderResponseHeaders] = useState<
     { id: string; key: string; value: string }[]
@@ -83,13 +118,20 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     { id: string; key: string; value: string }[]
   >([]);
   const [builderTemplateVariants, setBuilderTemplateVariants] = useState<
-    { id: string; name: string; values: { id: string; key: string; value: string }[] }[]
+    {
+      id: string;
+      name: string;
+      values: { id: string; key: string; value: string }[];
+    }[]
   >([]);
-  const [builderActiveVariantId, setBuilderActiveVariantId] = useState<string | null>(null);
+  const [builderActiveVariantId, setBuilderActiveVariantId] = useState<
+    string | null
+  >(null);
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
-  const dragRef = useRef<{ blockId: string; source: "library" | "active" } | null>(
-    null
-  );
+  const dragRef = useRef<{
+    blockId: string;
+    source: "library" | "active";
+  } | null>(null);
   const pointerPosRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -99,7 +141,11 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
       }
       return;
     }
-    if (!builderTemplateVariants.some((variant) => variant.id === builderActiveVariantId)) {
+    if (
+      !builderTemplateVariants.some(
+        (variant) => variant.id === builderActiveVariantId,
+      )
+    ) {
       setBuilderActiveVariantId(builderTemplateVariants[0]?.id ?? null);
     }
   }, [builderTemplateVariants, builderActiveVariantId]);
@@ -107,6 +153,7 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
   const createSeedLibrary = () =>
     initialLibrary.map((block) => ({
       ...block,
+      category: block.category ?? "",
       templateValues: [...block.templateValues],
       templateVariants: block.templateVariants.map((variant) => ({
         ...variant,
@@ -129,7 +176,7 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
   };
 
   const normalizeTemplateValues = (
-    values: { id: string; key: string; value: string }[]
+    values: { id: string; key: string; value: string }[],
   ) =>
     values
       .map((item) => ({
@@ -141,7 +188,7 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
 
   const ensureTemplateKeys = (
     values: { id: string; key: string; value: string }[],
-    template: string
+    template: string,
   ) => {
     const keys = extractTemplateKeys(template);
     if (keys.length === 0) {
@@ -177,11 +224,15 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
             return { name: profile.name, blocks };
           } catch (error) {
             if (import.meta.env.DEV) {
-              console.error("[blocks] failed to load blocks", profile.name, error);
+              console.error(
+                "[blocks] failed to load blocks",
+                profile.name,
+                error,
+              );
             }
             return { name: profile.name, blocks: null };
           }
-        })
+        }),
       );
 
       if (!isActive) {
@@ -192,7 +243,10 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
         const next = { ...prev };
         entries.forEach(({ name, blocks }) => {
           if (blocks) {
-            if (blocks.libraryBlocks.length === 0 && blocks.activeBlocks.length === 0) {
+            if (
+              blocks.libraryBlocks.length === 0 &&
+              blocks.activeBlocks.length === 0
+            ) {
               next[name] = createSeedLibrary();
             } else {
               next[name] = blocks.libraryBlocks;
@@ -208,11 +262,26 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
         const next = { ...prev };
         entries.forEach(({ name, blocks }) => {
           if (blocks) {
-            if (blocks.libraryBlocks.length === 0 && blocks.activeBlocks.length === 0) {
+            if (
+              blocks.libraryBlocks.length === 0 &&
+              blocks.activeBlocks.length === 0
+            ) {
               next[name] = [];
             } else {
               next[name] = blocks.activeBlocks;
             }
+          } else if (!next[name]) {
+            next[name] = [];
+          }
+        });
+        return next;
+      });
+
+      setCategoriesByProfile((prev) => {
+        const next = { ...prev };
+        entries.forEach(({ name, blocks }) => {
+          if (blocks) {
+            next[name] = blocks.categories ?? [];
           } else if (!next[name]) {
             next[name] = [];
           }
@@ -225,17 +294,24 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
           if (!blocks) {
             return;
           }
-          if (blocks.libraryBlocks.length === 0 && blocks.activeBlocks.length === 0) {
+          if (
+            blocks.libraryBlocks.length === 0 &&
+            blocks.activeBlocks.length === 0
+          ) {
             const seed = createSeedLibrary();
             try {
-              await updateBlocks(name, { libraryBlocks: seed, activeBlocks: [] });
+              await updateBlocks(name, {
+                libraryBlocks: seed,
+                activeBlocks: [],
+                categories: [],
+              });
             } catch (error) {
               if (import.meta.env.DEV) {
                 console.error("[blocks] failed to seed blocks", name, error);
               }
             }
           }
-        })
+        }),
       );
     };
 
@@ -248,10 +324,11 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
 
   const libraryBlocks = libraryBlocksByProfile[selectedProfile] ?? [];
   const activeBlocks = activeBlocksByProfile[selectedProfile] ?? [];
+  const categories = categoriesByProfile[selectedProfile] ?? [];
 
   const blockIndex = useMemo(() => {
     return new Map(
-      [...libraryBlocks, ...activeBlocks].map((block) => [block.id, block])
+      [...libraryBlocks, ...activeBlocks].map((block) => [block.id, block]),
     );
   }, [libraryBlocks, activeBlocks]);
 
@@ -259,7 +336,7 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     (
       blockId: string | undefined,
       source: "library" | "active" | undefined,
-      destination: "library" | "active"
+      destination: "library" | "active",
     ) => {
       if (!blockId || !source || source === destination) {
         if (import.meta.env.DEV) {
@@ -312,13 +389,14 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
       updateBlocks(selectedProfile, {
         libraryBlocks: nextLibrary,
         activeBlocks: nextActive,
+        categories,
       }).catch((error) => {
         if (import.meta.env.DEV) {
           console.error("[blocks] failed to persist move", error);
         }
       });
     },
-    [blockIndex, selectedProfile, libraryBlocks, activeBlocks]
+    [blockIndex, selectedProfile, libraryBlocks, activeBlocks, categories],
   );
 
   useEffect(() => {
@@ -379,12 +457,12 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
       }
       event.dataTransfer.setData(
         "text/plain",
-        JSON.stringify({ blockId, source })
+        JSON.stringify({ blockId, source }),
       );
       event.dataTransfer.setData("text", JSON.stringify({ blockId, source }));
       event.dataTransfer.setData(
         "application/json",
-        JSON.stringify({ blockId, source })
+        JSON.stringify({ blockId, source }),
       );
       event.dataTransfer.effectAllowed = "move";
     };
@@ -431,14 +509,18 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     if (import.meta.env.DEV) {
-      console.log("[drag] allowDrop", { types: Array.from(event.dataTransfer.types) });
+      console.log("[drag] allowDrop", {
+        types: Array.from(event.dataTransfer.types),
+      });
     }
   };
 
   const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     if (import.meta.env.DEV) {
-      console.log("[drag] enter", { types: Array.from(event.dataTransfer.types) });
+      console.log("[drag] enter", {
+        types: Array.from(event.dataTransfer.types),
+      });
     }
   };
 
@@ -471,6 +553,7 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     updateBlocks(selectedProfile, {
       libraryBlocks: nextLibrary,
       activeBlocks,
+      categories,
     }).catch((error) => {
       if (import.meta.env.DEV) {
         console.error("[blocks] failed to delete block", error);
@@ -478,11 +561,30 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     });
   };
 
+  const replaceBlocksForProfile = useCallback(
+    (
+      profileName: string,
+      newLibraryBlocks: Block[],
+      newActiveBlocks: Block[],
+    ) => {
+      setLibraryBlocksByProfile((prev) => ({
+        ...prev,
+        [profileName]: newLibraryBlocks,
+      }));
+      setActiveBlocksByProfile((prev) => ({
+        ...prev,
+        [profileName]: newActiveBlocks,
+      }));
+    },
+    [],
+  );
+
   const resetBuilder = () => {
     setBuilderName("");
     setBuilderMethod("GET");
     setBuilderPath("/api/");
     setBuilderDescription("");
+    setBuilderCategory("");
     setBuilderResponseTemplate("");
     setBuilderResponseHeaders([]);
     setBuilderTemplateValues([]);
@@ -507,7 +609,9 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
       return;
     }
 
-    const responseHeaders = builderResponseHeaders.reduce<Record<string, string>>((acc, item) => {
+    const responseHeaders = builderResponseHeaders.reduce<
+      Record<string, string>
+    >((acc, item) => {
       const key = item.key.trim();
       if (!key) {
         return acc;
@@ -523,10 +627,10 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
       values: normalizeTemplateValues(variant.values),
     }));
     const activeVariantId = templateVariants.some(
-      (variant) => variant.id === builderActiveVariantId
+      (variant) => variant.id === builderActiveVariantId,
     )
       ? builderActiveVariantId
-      : templateVariants[0]?.id ?? null;
+      : (templateVariants[0]?.id ?? null);
 
     const nextBlock: Block = {
       id: editingBlockId ?? `block-${Date.now()}`,
@@ -534,6 +638,7 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
       method: builderMethod,
       path: trimmedPath,
       description: `${builderMethod} ${trimmedPath}`,
+      category: builderCategory.trim() || "",
       responseTemplate: builderResponseTemplate.trim(),
       responseHeaders,
       templateValues,
@@ -562,6 +667,7 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     updateBlocks(selectedProfile, {
       libraryBlocks: nextLibrary,
       activeBlocks: nextActive,
+      categories,
     }).catch((error) => {
       if (import.meta.env.DEV) {
         console.error("[blocks] failed to persist block", error);
@@ -575,7 +681,7 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
       id: string;
       key: string;
       value: string;
-    }[]
+    }[],
   ) => {
     if (builderTemplateVariants.length === 0) {
       setBuilderTemplateValues((prev) => updater(prev));
@@ -587,8 +693,10 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     }
     setBuilderTemplateVariants((prev) =>
       prev.map((variant) =>
-        variant.id === activeId ? { ...variant, values: updater(variant.values) } : variant
-      )
+        variant.id === activeId
+          ? { ...variant, values: updater(variant.values) }
+          : variant,
+      ),
     );
   };
 
@@ -614,7 +722,10 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
         },
       ];
     });
-    if (builderTemplateVariants.length === 0 && builderTemplateValues.length > 0) {
+    if (
+      builderTemplateVariants.length === 0 &&
+      builderTemplateValues.length > 0
+    ) {
       setBuilderTemplateValues([]);
     }
     setBuilderActiveVariantId(id);
@@ -632,7 +743,9 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
       return;
     }
     if (builderTemplateVariants.length === 0) {
-      setBuilderTemplateValues((prev) => ensureTemplateKeys(prev, builderResponseTemplate));
+      setBuilderTemplateValues((prev) =>
+        ensureTemplateKeys(prev, builderResponseTemplate),
+      );
       return;
     }
     const activeId = builderActiveVariantId ?? builderTemplateVariants[0]?.id;
@@ -642,20 +755,36 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     setBuilderTemplateVariants((prev) =>
       prev.map((variant) =>
         variant.id === activeId
-          ? { ...variant, values: ensureTemplateKeys(variant.values, builderResponseTemplate) }
-          : variant
-      )
+          ? {
+              ...variant,
+              values: ensureTemplateKeys(
+                variant.values,
+                builderResponseTemplate,
+              ),
+            }
+          : variant,
+      ),
     );
-  }, [builderResponseTemplate, builderActiveVariantId, builderTemplateVariants.length]);
+  }, [
+    builderResponseTemplate,
+    builderActiveVariantId,
+    builderTemplateVariants.length,
+  ]);
 
-  const updateTemplateValue = (id: string, field: "key" | "value", value: string) => {
+  const updateTemplateValue = (
+    id: string,
+    field: "key" | "value",
+    value: string,
+  ) => {
     updateEditableTemplateValues((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
+      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
     );
   };
 
   const removeTemplateValue = (id: string) => {
-    updateEditableTemplateValues((prev) => prev.filter((item) => item.id !== id));
+    updateEditableTemplateValues((prev) =>
+      prev.filter((item) => item.id !== id),
+    );
   };
 
   const removeTemplateVariant = (variantId: string) => {
@@ -674,13 +803,19 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
 
   const updateTemplateVariantName = (variantId: string, value: string) => {
     setBuilderTemplateVariants((prev) =>
-      prev.map((variant) => (variant.id === variantId ? { ...variant, name: value } : variant))
+      prev.map((variant) =>
+        variant.id === variantId ? { ...variant, name: value } : variant,
+      ),
     );
   };
 
-  const updateResponseHeader = (id: string, field: "key" | "value", value: string) => {
+  const updateResponseHeader = (
+    id: string,
+    field: "key" | "value",
+    value: string,
+  ) => {
     setBuilderResponseHeaders((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
+      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
     );
   };
 
@@ -693,13 +828,16 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     setBuilderMethod(entry.method);
     setBuilderPath(entry.path);
     setBuilderDescription(`${entry.method} ${entry.path}`);
+    setBuilderCategory("");
     setBuilderResponseTemplate(entry.response?.body ?? "");
     setBuilderResponseHeaders(
-      Object.entries(entry.response?.headers ?? {}).map(([key, value], index) => ({
-        id: `header-${Date.now()}-${index}`,
-        key,
-        value,
-      }))
+      Object.entries(entry.response?.headers ?? {}).map(
+        ([key, value], index) => ({
+          id: `header-${Date.now()}-${index}`,
+          key,
+          value,
+        }),
+      ),
     );
     setBuilderTemplateValues([]);
     setBuilderTemplateVariants([]);
@@ -717,19 +855,22 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     setBuilderMethod(block.method);
     setBuilderPath(block.path);
     setBuilderDescription(block.description);
+    setBuilderCategory(block.category ?? "");
     setBuilderResponseTemplate(block.responseTemplate);
     setBuilderResponseHeaders(
-      Object.entries(block.responseHeaders ?? {}).map(([key, value], index) => ({
-        id: `header-${Date.now()}-${index}`,
-        key,
-        value,
-      }))
+      Object.entries(block.responseHeaders ?? {}).map(
+        ([key, value], index) => ({
+          id: `header-${Date.now()}-${index}`,
+          key,
+          value,
+        }),
+      ),
     );
     setBuilderTemplateValues(
       block.templateValues.map((item, index) => ({
         ...item,
         id: item.id || `template-${Date.now()}-${index}`,
-      }))
+      })),
     );
     setBuilderTemplateVariants(
       block.templateVariants.map((variant, variantIndex) => ({
@@ -739,12 +880,10 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
           ...item,
           id: item.id || `template-${Date.now()}-${variantIndex}-${index}`,
         })),
-      }))
+      })),
     );
     setBuilderActiveVariantId(
-      block.activeVariantId ??
-        block.templateVariants[0]?.id ??
-        null
+      block.activeVariantId ?? block.templateVariants[0]?.id ?? null,
     );
     setEditingBlockId(block.id);
     setIsBuilderOpen(true);
@@ -774,9 +913,126 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     updateBlocks(selectedProfile, {
       libraryBlocks: nextLibrary,
       activeBlocks: nextActive,
+      categories,
     }).catch((error) => {
       if (import.meta.env.DEV) {
         console.error("[blocks] failed to update variant", error);
+      }
+    });
+  };
+
+  const addCategory = (name: string) => {
+    if (!selectedProfile) return;
+    const trimmed = name.trim();
+    if (!trimmed || categories.includes(trimmed)) return;
+    const nextCategories = [...categories, trimmed];
+    setCategoriesByProfile((prev) => ({
+      ...prev,
+      [selectedProfile]: nextCategories,
+    }));
+    updateBlocks(selectedProfile, {
+      libraryBlocks,
+      activeBlocks,
+      categories: nextCategories,
+    }).catch((error) => {
+      if (import.meta.env.DEV) {
+        console.error("[blocks] failed to add category", error);
+      }
+    });
+  };
+
+  const renameCategory = (oldName: string, newName: string) => {
+    if (!selectedProfile) return;
+    const trimmed = newName.trim();
+    if (!trimmed || (trimmed !== oldName && categories.includes(trimmed))) return;
+    const nextCategories = categories.map((c) => (c === oldName ? trimmed : c));
+    const updateBlockCategory = (block: Block) =>
+      (block.category ?? "").trim() === oldName
+        ? { ...block, category: trimmed }
+        : block;
+    const nextLibrary = libraryBlocks.map(updateBlockCategory);
+    const nextActive = activeBlocks.map(updateBlockCategory);
+    setCategoriesByProfile((prev) => ({
+      ...prev,
+      [selectedProfile]: nextCategories,
+    }));
+    setLibraryBlocksByProfile((prev) => ({
+      ...prev,
+      [selectedProfile]: nextLibrary,
+    }));
+    setActiveBlocksByProfile((prev) => ({
+      ...prev,
+      [selectedProfile]: nextActive,
+    }));
+    updateBlocks(selectedProfile, {
+      libraryBlocks: nextLibrary,
+      activeBlocks: nextActive,
+      categories: nextCategories,
+    }).catch((error) => {
+      if (import.meta.env.DEV) {
+        console.error("[blocks] failed to rename category", error);
+      }
+    });
+  };
+
+  const deleteCategory = (name: string) => {
+    if (!selectedProfile) return;
+    const nextCategories = categories.filter((c) => c !== name);
+    const clearCategory = (block: Block) =>
+      (block.category ?? "").trim() === name
+        ? { ...block, category: "" }
+        : block;
+    const nextLibrary = libraryBlocks.map(clearCategory);
+    const nextActive = activeBlocks.map(clearCategory);
+    setCategoriesByProfile((prev) => ({
+      ...prev,
+      [selectedProfile]: nextCategories,
+    }));
+    setLibraryBlocksByProfile((prev) => ({
+      ...prev,
+      [selectedProfile]: nextLibrary,
+    }));
+    setActiveBlocksByProfile((prev) => ({
+      ...prev,
+      [selectedProfile]: nextActive,
+    }));
+    updateBlocks(selectedProfile, {
+      libraryBlocks: nextLibrary,
+      activeBlocks: nextActive,
+      categories: nextCategories,
+    }).catch((error) => {
+      if (import.meta.env.DEV) {
+        console.error("[blocks] failed to delete category", error);
+      }
+    });
+  };
+
+  const moveBlockToCategory = (blockId: string, category: string) => {
+    if (!selectedProfile) return;
+    const newCategory = category === "Uncategorized" ? "" : category;
+    const block = blockIndex.get(blockId);
+    if (!block) return;
+    if ((block.category ?? "").trim() === newCategory.trim()) return;
+    const updatedBlock = { ...block, category: newCategory };
+    const updateList = (items: Block[]) =>
+      items.map((item) => (item.id === blockId ? updatedBlock : item));
+    const nextLibrary = updateList(libraryBlocks);
+    const nextActive = updateList(activeBlocks);
+    setLibraryBlocksByProfile((prev) => ({
+      ...prev,
+      [selectedProfile]: nextLibrary,
+    }));
+    setActiveBlocksByProfile((prev) => ({
+      ...prev,
+      [selectedProfile]: nextActive,
+    }));
+    updateBlocks(selectedProfile, {
+      libraryBlocks: nextLibrary,
+      activeBlocks: nextActive,
+      categories,
+    }).catch((error) => {
+      if (import.meta.env.DEV) {
+        console.error("[blocks] failed to move block to category", error);
       }
     });
   };
@@ -789,6 +1045,7 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     builderMethod,
     builderPath,
     builderDescription,
+    builderCategory,
     builderResponseTemplate,
     builderResponseHeaders,
     builderTemplateValues,
@@ -800,6 +1057,7 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     setBuilderMethod,
     setBuilderPath,
     setBuilderDescription,
+    setBuilderCategory,
     setBuilderResponseTemplate,
     setBuilderActiveVariantId,
     addTemplateVariant,
@@ -823,6 +1081,12 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     handleDragEnd,
     handlePointerDown,
     removeLibraryBlock,
+    replaceBlocksForProfile,
+    categories,
+    addCategory,
+    renameCategory,
+    deleteCategory,
+    moveBlockToCategory,
   };
 };
 

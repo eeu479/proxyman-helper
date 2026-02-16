@@ -1,4 +1,5 @@
 import type { FormEvent } from "react";
+import { useRef } from "react";
 import type { Profile } from "../../types/profile";
 
 type SettingsPanelProps = {
@@ -18,6 +19,9 @@ type SettingsPanelProps = {
   onSave: (event: FormEvent<HTMLFormElement>) => void;
   onAddSubprofile: () => void;
   onEditSubprofile: (profileName: string, subprofileName: string) => void;
+  onExportBlocks: () => void;
+  onImportBlocks: (file: File) => Promise<void>;
+  importBlocksMessage: string | null;
 };
 
 const SettingsPanel = ({
@@ -37,10 +41,27 @@ const SettingsPanel = ({
   onSave,
   onAddSubprofile,
   onEditSubprofile,
+  onExportBlocks,
+  onImportBlocks,
+  importBlocksMessage,
 }: SettingsPanelProps) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const selectedProfileData =
     profiles.find((p) => p.name === selectedProfile) ?? null;
   const subprofiles = selectedProfileData?.subProfiles ?? [];
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      onImportBlocks(file).finally(() => {
+        e.target.value = "";
+      });
+    }
+  };
 
   if (!selectedProfileData) {
     return (
@@ -169,6 +190,50 @@ const SettingsPanel = ({
               ))
             )}
           </div>
+        </div>
+
+        <div className="settings__section">
+          <span className="settings__label">Blocks</span>
+          <p className="settings__blocks-hint">
+            Export or import the library for the current profile.
+          </p>
+          <div className="settings__blocks-actions">
+            <button
+              className="settings__button settings__button--edit"
+              type="button"
+              onClick={onExportBlocks}
+            >
+              Export library
+            </button>
+            <button
+              className="settings__button settings__button--edit"
+              type="button"
+              onClick={handleImportClick}
+            >
+              Import blocks
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              className="settings__file-input"
+              aria-hidden
+              tabIndex={-1}
+              onChange={handleFileChange}
+            />
+          </div>
+          {importBlocksMessage ? (
+            <div
+              className={
+                importBlocksMessage.startsWith("Invalid") ||
+                importBlocksMessage.startsWith("Import failed")
+                  ? "settings__error"
+                  : "settings__success"
+              }
+            >
+              {importBlocksMessage}
+            </div>
+          ) : null}
         </div>
 
         {updateProfileError ? (

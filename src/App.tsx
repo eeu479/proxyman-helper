@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { BlocksPayload } from "./api/blocks";
+import { updateBlocks } from "./api/blocks";
 import ActivePanel from "./components/blocks/ActivePanel";
 import LibraryPanel from "./components/blocks/LibraryPanel";
 import DebugPanel from "./components/debug/DebugPanel";
@@ -11,12 +13,16 @@ import SettingsPanel from "./components/settings/SettingsPanel";
 import useBlocks from "./hooks/useBlocks";
 import useProfiles from "./hooks/useProfiles";
 import useSubprofiles from "./hooks/useSubprofiles";
+import type { Block } from "./types/block";
 
 const App = () => {
-  const [activeView, setActiveView] = useState<"builder" | "debug" | "settings">(
-    "builder"
-  );
+  const [activeView, setActiveView] = useState<
+    "builder" | "debug" | "settings"
+  >("builder");
   const [selectedSubprofile, setSelectedSubprofile] = useState("");
+  const [importBlocksMessage, setImportBlocksMessage] = useState<string | null>(
+    null,
+  );
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     const saved = localStorage.getItem("theme");
     return saved === "light" ? "light" : "dark";
@@ -102,6 +108,7 @@ const App = () => {
     builderMethod,
     builderPath,
     builderDescription,
+    builderCategory,
     builderResponseTemplate,
     builderResponseHeaders,
     builderTemplateValues,
@@ -113,6 +120,7 @@ const App = () => {
     setBuilderMethod,
     setBuilderPath,
     setBuilderDescription,
+    setBuilderCategory,
     setBuilderResponseTemplate,
     setBuilderActiveVariantId,
     addTemplateVariant,
@@ -134,8 +142,14 @@ const App = () => {
     handleDragEnd,
     handlePointerDown,
     removeLibraryBlock,
+    replaceBlocksForProfile,
     editBlock,
     setBlockActiveVariant,
+    categories,
+    addCategory,
+    renameCategory,
+    deleteCategory,
+    moveBlockToCategory,
   } = useBlocks({ profiles, selectedProfile });
 
   useEffect(() => {
@@ -147,6 +161,92 @@ const App = () => {
       setSelectedSubprofile(subs[0]?.name ?? "");
     }
   }, [profiles, selectedProfile, selectedSubprofile]);
+
+  const handleExportBlocks = useCallback(() => {
+    if (!selectedProfile) return;
+    const payload = { libraryBlocks: libraryBlocks };
+    const json = JSON.stringify(payload, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const date = new Date().toISOString().slice(0, 10);
+    a.download = `local-proxy-library-${selectedProfile}-${date}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [selectedProfile, libraryBlocks]);
+
+  const handleExportBlock = useCallback((block: Block) => {
+    const payload = { libraryBlocks: [block], activeBlocks: [] };
+    const json = JSON.stringify(payload, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const sanitized = block.name.replace(/[^a-zA-Z0-9-_]/g, "-");
+    a.download = `local-proxy-block-${sanitized}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  function isValidBlocksPayload(
+    payload: unknown,
+  ): payload is { libraryBlocks: unknown[]; activeBlocks?: unknown[] } {
+    if (typeof payload !== "object" || payload === null) return false;
+    const p = payload as Record<string, unknown>;
+    return Array.isArray(p.libraryBlocks);
+  }
+
+  function isBlockLike(item: unknown): item is Record<string, unknown> {
+    if (typeof item !== "object" || item === null) return false;
+    const o = item as Record<string, unknown>;
+    return (
+      typeof o.id === "string" &&
+      typeof o.name === "string" &&
+      typeof o.method === "string" &&
+      typeof o.path === "string"
+    );
+  }
+
+  const handleImportBlocks = useCallback(
+    async (file: File) => {
+      if (!selectedProfile) {
+        setImportBlocksMessage("No profile selected.");
+        return;
+      }
+      setImportBlocksMessage(null);
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text) as unknown;
+        if (!isValidBlocksPayload(parsed)) {
+          setImportBlocksMessage("Invalid blocks file: missing libraryBlocks.");
+          return;
+        }
+        if (!parsed.libraryBlocks.every(isBlockLike)) {
+          setImportBlocksMessage(
+            "Invalid blocks file: each block must have id, name, method, and path.",
+          );
+          return;
+        }
+        const library = parsed.libraryBlocks as BlocksPayload["libraryBlocks"];
+        await updateBlocks(selectedProfile, {
+          libraryBlocks: library,
+          activeBlocks: activeBlocks,
+        });
+        replaceBlocksForProfile(selectedProfile, library, activeBlocks);
+        setImportBlocksMessage("Import successful.");
+        setTimeout(() => setImportBlocksMessage(null), 3000);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Import failed.";
+        setImportBlocksMessage(
+          err instanceof SyntaxError
+            ? "Invalid blocks file: invalid JSON."
+            : message,
+        );
+      }
+    },
+    [selectedProfile, activeBlocks, replaceBlocksForProfile],
+  );
 
   return (
     <div className="app">
@@ -166,7 +266,9 @@ const App = () => {
         }
       />
 
-      <main className={`main ${activeView !== "builder" ? "main--single" : ""}`}>
+      <main
+        className={`main ${activeView !== "builder" ? "main--single" : ""}`}
+      >
         {activeView === "debug" ? (
           <DebugPanel onCreateBlockFromLog={openBuilderFromLog} />
         ) : activeView === "settings" ? (
@@ -186,7 +288,7 @@ const App = () => {
               addProfileParam(
                 editProfileParamInput,
                 setEditProfileParams,
-                setEditProfileParamInput
+                setEditProfileParamInput,
               )
             }
             onRemoveParam={(value: string) =>
@@ -195,12 +297,18 @@ const App = () => {
             onSave={handleUpdateProfile}
             onAddSubprofile={openCreateSubprofileModal}
             onEditSubprofile={openEditSubprofileModal}
+            onExportBlocks={handleExportBlocks}
+            onImportBlocks={handleImportBlocks}
+            importBlocksMessage={importBlocksMessage}
           />
         ) : (
           <>
             <LibraryPanel
               blocks={libraryBlocks}
+              categories={categories}
               onCreateBlock={() => setIsBuilderOpen(true)}
+              onImportBlocks={handleImportBlocks}
+              importBlocksMessage={importBlocksMessage}
               onDragOver={allowDrop}
               onDragEnter={handleDragEnter}
               onDrop={handleDrop("library")}
@@ -209,7 +317,12 @@ const App = () => {
               onPointerDown={(blockId) => handlePointerDown(blockId, "library")}
               onDeleteBlock={removeLibraryBlock}
               onEditBlock={editBlock}
+              onExportBlock={handleExportBlock}
               onSelectVariant={setBlockActiveVariant}
+              onAddCategory={addCategory}
+              onRenameCategory={renameCategory}
+              onDeleteCategory={deleteCategory}
+              onMoveBlockToCategory={moveBlockToCategory}
             />
             <ActivePanel
               blocks={activeBlocks}
@@ -234,6 +347,7 @@ const App = () => {
         builderMethod={builderMethod}
         builderPath={builderPath}
         builderDescription={builderDescription}
+        builderCategory={builderCategory}
         builderResponseTemplate={builderResponseTemplate}
         builderResponseHeaders={builderResponseHeaders}
         builderTemplateValues={builderTemplateValues}
@@ -245,6 +359,7 @@ const App = () => {
         onChangeMethod={setBuilderMethod}
         onChangePath={setBuilderPath}
         onChangeDescription={setBuilderDescription}
+        onChangeCategory={setBuilderCategory}
         onChangeResponseTemplate={setBuilderResponseTemplate}
         onSelectTemplateVariant={setBuilderActiveVariantId}
         onAddTemplateVariant={addTemplateVariant}
@@ -272,16 +387,24 @@ const App = () => {
         onChangeBaseUrl={setNewProfileBaseUrl}
         onChangeParamInput={setNewProfileParamInput}
         onAddParam={() =>
-          addProfileParam(newProfileParamInput, setNewProfileParams, setNewProfileParamInput)
+          addProfileParam(
+            newProfileParamInput,
+            setNewProfileParams,
+            setNewProfileParamInput,
+          )
         }
-        onRemoveParam={(value: string) => removeProfileParam(value, setNewProfileParams)}
+        onRemoveParam={(value: string) =>
+          removeProfileParam(value, setNewProfileParams)
+        }
       />
 
       <CreateSubprofileModal
         isOpen={isCreateSubprofileModalOpen}
         name={newSubprofileName}
         params={newSubprofileParams}
-        requiredKeys={profiles.find((item) => item.name === selectedProfile)?.params ?? []}
+        requiredKeys={
+          profiles.find((item) => item.name === selectedProfile)?.params ?? []
+        }
         valueByKey={subprofileValueByKey}
         paramValueInput={newSubprofileParamValue}
         isSubmitting={isSavingSubprofile}
@@ -295,7 +418,7 @@ const App = () => {
           addSubprofileParam(
             newSubprofileParamValue,
             setNewSubprofileParams,
-            setNewSubprofileParamValue
+            setNewSubprofileParamValue,
           )
         }
         onRemoveExtraParam={(key: string) =>
@@ -308,7 +431,8 @@ const App = () => {
         name={editSubprofileName}
         params={editSubprofileParams}
         requiredKeys={
-          profiles.find((item) => item.name === subprofileProfileName)?.params ?? []
+          profiles.find((item) => item.name === subprofileProfileName)
+            ?.params ?? []
         }
         valueByKey={subprofileValueByKey}
         paramValueInput={editSubprofileParamValue}
@@ -323,7 +447,7 @@ const App = () => {
           addSubprofileParam(
             editSubprofileParamValue,
             setEditSubprofileParams,
-            setEditSubprofileParamValue
+            setEditSubprofileParamValue,
           )
         }
         onRemoveExtraParam={(key: string) =>

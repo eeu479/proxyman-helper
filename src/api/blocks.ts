@@ -28,6 +28,7 @@ const ensureOk = async (response: Response) => {
 export type BlocksPayload = {
   libraryBlocks: Block[];
   activeBlocks: Block[];
+  categories?: string[];
 };
 
 export const fetchBlocks = async (profileName: string) => {
