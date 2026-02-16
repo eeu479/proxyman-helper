@@ -13,6 +13,8 @@ type BlockBuilderModalProps = {
   builderResponseTemplate: string;
   builderResponseHeaders: { id: string; key: string; value: string }[];
   builderTemplateValues: TemplateValue[];
+  builderTemplateVariants: { id: string; name: string; values: TemplateValue[] }[];
+  builderActiveVariantId: string | null;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onChangeName: (value: string) => void;
@@ -20,6 +22,10 @@ type BlockBuilderModalProps = {
   onChangePath: (value: string) => void;
   onChangeDescription: (value: string) => void;
   onChangeResponseTemplate: (value: string) => void;
+  onSelectTemplateVariant: (value: string) => void;
+  onAddTemplateVariant: (name?: string) => void;
+  onRemoveTemplateVariant: (variantId: string) => void;
+  onUpdateTemplateVariantName: (variantId: string, value: string) => void;
   onAddResponseHeader: (key?: string, value?: string) => void;
   onUpdateResponseHeader: (id: string, field: "key" | "value", value: string) => void;
   onRemoveResponseHeader: (id: string) => void;
@@ -38,6 +44,8 @@ const BlockBuilderModal = ({
   builderResponseTemplate,
   builderResponseHeaders,
   builderTemplateValues,
+  builderTemplateVariants,
+  builderActiveVariantId,
   onClose,
   onSubmit,
   onChangeName,
@@ -45,6 +53,10 @@ const BlockBuilderModal = ({
   onChangePath,
   onChangeDescription,
   onChangeResponseTemplate,
+  onSelectTemplateVariant,
+  onAddTemplateVariant,
+  onRemoveTemplateVariant,
+  onUpdateTemplateVariantName,
   onAddResponseHeader,
   onUpdateResponseHeader,
   onRemoveResponseHeader,
@@ -53,10 +65,19 @@ const BlockBuilderModal = ({
   onRemoveTemplateValue,
 }: BlockBuilderModalProps) => {
   const [activeTab, setActiveTab] = useState<"response" | "headers">("response");
+  const [isVariantDialogOpen, setIsVariantDialogOpen] = useState(false);
+  const [variantNameInput, setVariantNameInput] = useState("");
+  const activeVariant =
+    builderTemplateVariants.find((variant) => variant.id === builderActiveVariantId) ??
+    builderTemplateVariants[0];
+  const visibleTemplateValues =
+    builderTemplateVariants.length > 0 ? activeVariant?.values ?? [] : builderTemplateValues;
 
   useEffect(() => {
     if (isOpen) {
       setActiveTab("response");
+      setIsVariantDialogOpen(false);
+      setVariantNameInput("");
     }
   }, [isOpen]);
 
@@ -96,13 +117,14 @@ const BlockBuilderModal = ({
   };
 
   return (
-    <Modal
-      title={isEditing ? "Edit Block" : "Block Builder"}
-      isOpen={isOpen}
-      onClose={onClose}
-      closeLabel="Close block builder"
-    >
-      <form className="modal__form" onSubmit={onSubmit}>
+    <>
+      <Modal
+        title={isEditing ? "Edit Block" : "Block Builder"}
+        isOpen={isOpen}
+        onClose={onClose}
+        closeLabel="Close block builder"
+      >
+        <form className="modal__form" onSubmit={onSubmit}>
         <label className="modal__label">
           Name
           <input
@@ -187,6 +209,59 @@ const BlockBuilderModal = ({
             </label>
             <div className="modal__section">
               <div className="modal__section-header">
+                <span>Template Variants</span>
+                <button
+                  className="panel__action panel__action--ghost"
+                  type="button"
+                  onClick={() => setIsVariantDialogOpen(true)}
+                >
+                  Add Variant
+                </button>
+              </div>
+              {builderTemplateVariants.length === 0 ? (
+                <div className="modal__empty">No variants yet.</div>
+              ) : (
+                <div className="modal__variant-controls">
+                  <label className="modal__label">
+                    Active Variant
+                    <select
+                      className="modal__input"
+                      value={activeVariant?.id ?? ""}
+                      onChange={(event) => onSelectTemplateVariant(event.target.value)}
+                    >
+                      {builderTemplateVariants.map((variant) => (
+                        <option key={variant.id} value={variant.id}>
+                          {variant.name || "Untitled Variant"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="modal__label">
+                    Variant Name
+                    <input
+                      className="modal__input"
+                      type="text"
+                      value={activeVariant?.name ?? ""}
+                      onChange={(event) =>
+                        activeVariant &&
+                        onUpdateTemplateVariantName(activeVariant.id, event.target.value)
+                      }
+                      placeholder="Variant name"
+                    />
+                  </label>
+                  <button
+                    className="modal__remove"
+                    type="button"
+                    onClick={() => activeVariant && onRemoveTemplateVariant(activeVariant.id)}
+                    aria-label="Remove template variant"
+                  >
+                    Remove Variant
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="modal__section">
+              <div className="modal__section-header">
                 <span>Template Values</span>
                 <button
                   className="panel__action panel__action--ghost"
@@ -196,11 +271,11 @@ const BlockBuilderModal = ({
                   Add Value
                 </button>
               </div>
-              {builderTemplateValues.length === 0 ? (
+              {visibleTemplateValues.length === 0 ? (
                 <div className="modal__empty">No template values yet.</div>
               ) : (
                 <div className="modal__template-list">
-                  {builderTemplateValues.map((item) => (
+                  {visibleTemplateValues.map((item) => (
                     <div key={item.id} className="modal__template-row">
                       <input
                         className="modal__input"
@@ -292,8 +367,56 @@ const BlockBuilderModal = ({
             {isEditing ? "Update Block" : "Save Block"}
           </button>
         </div>
-      </form>
-    </Modal>
+        </form>
+      </Modal>
+      <Modal
+        title="Add Variant"
+        isOpen={isVariantDialogOpen}
+        onClose={() => {
+          setIsVariantDialogOpen(false);
+          setVariantNameInput("");
+        }}
+        closeLabel="Close add variant"
+        contentClassName="modal__content modal__content--small"
+      >
+        <form
+          className="modal__form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onAddTemplateVariant(variantNameInput);
+            setIsVariantDialogOpen(false);
+            setVariantNameInput("");
+          }}
+        >
+          <label className="modal__label">
+            Variant Name
+            <input
+              className="modal__input"
+              type="text"
+              value={variantNameInput}
+              onChange={(event) => setVariantNameInput(event.target.value)}
+              placeholder="e.g. Success Response"
+              autoFocus
+            />
+          </label>
+          <div className="modal__actions">
+            <button
+              className="panel__action panel__action--ghost"
+              type="button"
+              onClick={() => {
+                setIsVariantDialogOpen(false);
+                setVariantNameInput("");
+              }}
+            >
+              Cancel
+            </button>
+            <button className="panel__action" type="submit">
+              Add Variant
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </>
   );
 };
 

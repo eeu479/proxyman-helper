@@ -10,6 +10,8 @@ export const initialLibrary: Block[] = [
     responseTemplate: "",
     responseHeaders: {},
     templateValues: [],
+    templateVariants: [],
+    activeVariantId: null,
   },
   {
     id: "block-2",
@@ -20,6 +22,8 @@ export const initialLibrary: Block[] = [
     responseTemplate: "",
     responseHeaders: {},
     templateValues: [],
+    templateVariants: [],
+    activeVariantId: null,
   },
   {
     id: "block-3",
@@ -30,6 +34,8 @@ export const initialLibrary: Block[] = [
     responseTemplate: "",
     responseHeaders: {},
     templateValues: [],
+    templateVariants: [],
+    activeVariantId: null,
   },
   {
     id: "block-4",
@@ -40,5 +46,7 @@ export const initialLibrary: Block[] = [
     responseTemplate: "",
     responseHeaders: {},
     templateValues: [],
+    templateVariants: [],
+    activeVariantId: null,
   },
 ];

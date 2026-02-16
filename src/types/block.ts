@@ -4,6 +4,12 @@ export type TemplateValue = {
   value: string;
 };
 
+export type TemplateVariant = {
+  id: string;
+  name: string;
+  values: TemplateValue[];
+};
+
 export type Block = {
   id: string;
   name: string;
@@ -13,4 +19,6 @@ export type Block = {
   responseTemplate: string;
   responseHeaders: Record<string, string>;
   templateValues: TemplateValue[];
+  templateVariants: TemplateVariant[];
+  activeVariantId?: string | null;
 };

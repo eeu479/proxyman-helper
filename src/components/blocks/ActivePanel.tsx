@@ -12,6 +12,7 @@ type ActivePanelProps = {
   onDragEnd: () => void;
   onPointerDown: (blockId: string) => PointerEventHandler<HTMLDivElement>;
   onEditBlock: (blockId: string) => void;
+  onSelectVariant: (blockId: string, variantId: string) => void;
 };
 
 const ActivePanel = ({
@@ -24,6 +25,7 @@ const ActivePanel = ({
   onDragEnd,
   onPointerDown,
   onEditBlock,
+  onSelectVariant,
 }: ActivePanelProps) => {
   return (
     <section className="panel panel--active">
@@ -51,6 +53,7 @@ const ActivePanel = ({
               onDragEnd={onDragEnd}
               onPointerDown={onPointerDown(block.id)}
               onEdit={() => onEditBlock(block.id)}
+              onSelectVariant={(variantId) => onSelectVariant(block.id, variantId)}
             />
           ))
         )}

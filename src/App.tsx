@@ -103,6 +103,8 @@ const App = () => {
     builderResponseTemplate,
     builderResponseHeaders,
     builderTemplateValues,
+    builderTemplateVariants,
+    builderActiveVariantId,
     isEditingBlock,
     setIsBuilderOpen,
     setBuilderName,
@@ -110,6 +112,10 @@ const App = () => {
     setBuilderPath,
     setBuilderDescription,
     setBuilderResponseTemplate,
+    setBuilderActiveVariantId,
+    addTemplateVariant,
+    removeTemplateVariant,
+    updateTemplateVariantName,
     addResponseHeader,
     updateResponseHeader,
     removeResponseHeader,
@@ -127,6 +133,7 @@ const App = () => {
     handlePointerDown,
     removeLibraryBlock,
     editBlock,
+    setBlockActiveVariant,
   } = useBlocks({ profiles, selectedProfile });
 
 
@@ -159,6 +166,7 @@ const App = () => {
               onPointerDown={(blockId) => handlePointerDown(blockId, "library")}
               onDeleteBlock={removeLibraryBlock}
               onEditBlock={editBlock}
+              onSelectVariant={setBlockActiveVariant}
             />
             <ActivePanel
               blocks={activeBlocks}
@@ -170,6 +178,7 @@ const App = () => {
               onDragEnd={handleDragEnd}
               onPointerDown={(blockId) => handlePointerDown(blockId, "active")}
               onEditBlock={editBlock}
+              onSelectVariant={setBlockActiveVariant}
             />
           </>
         )}
@@ -184,6 +193,8 @@ const App = () => {
         builderResponseTemplate={builderResponseTemplate}
         builderResponseHeaders={builderResponseHeaders}
         builderTemplateValues={builderTemplateValues}
+        builderTemplateVariants={builderTemplateVariants}
+        builderActiveVariantId={builderActiveVariantId}
         onClose={closeBuilder}
         onSubmit={handleCreateBlock}
         onChangeName={setBuilderName}
@@ -191,6 +202,10 @@ const App = () => {
         onChangePath={setBuilderPath}
         onChangeDescription={setBuilderDescription}
         onChangeResponseTemplate={setBuilderResponseTemplate}
+        onSelectTemplateVariant={setBuilderActiveVariantId}
+        onAddTemplateVariant={addTemplateVariant}
+        onRemoveTemplateVariant={removeTemplateVariant}
+        onUpdateTemplateVariantName={updateTemplateVariantName}
         onAddResponseHeader={addResponseHeader}
         onUpdateResponseHeader={updateResponseHeader}
         onRemoveResponseHeader={removeResponseHeader}

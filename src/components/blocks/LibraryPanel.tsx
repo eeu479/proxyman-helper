@@ -13,6 +13,7 @@ type LibraryPanelProps = {
   onPointerDown: (blockId: string) => PointerEventHandler<HTMLDivElement>;
   onDeleteBlock: (blockId: string) => void;
   onEditBlock: (blockId: string) => void;
+  onSelectVariant: (blockId: string, variantId: string) => void;
 };
 
 const LibraryPanel = ({
@@ -26,6 +27,7 @@ const LibraryPanel = ({
   onPointerDown,
   onDeleteBlock,
   onEditBlock,
+  onSelectVariant,
 }: LibraryPanelProps) => {
   return (
     <section className="panel">
@@ -58,6 +60,7 @@ const LibraryPanel = ({
               onPointerDown={onPointerDown(block.id)}
               onDelete={() => onDeleteBlock(block.id)}
               onEdit={() => onEditBlock(block.id)}
+              onSelectVariant={(variantId) => onSelectVariant(block.id, variantId)}
             />
           ))
         )}

@@ -10,6 +10,7 @@ type BlockCardProps = {
   onPointerDown?: PointerEventHandler<HTMLDivElement>;
   onDelete?: () => void;
   onEdit?: () => void;
+  onSelectVariant?: (variantId: string) => void;
 };
 
 const BlockCard = ({
@@ -21,8 +22,16 @@ const BlockCard = ({
   onPointerDown,
   onDelete,
   onEdit,
+  onSelectVariant,
 }: BlockCardProps) => {
   const cardClassName = className ? `block ${className}` : "block";
+  const activeVariant =
+    block.templateVariants.find((variant) => variant.id === block.activeVariantId) ??
+    block.templateVariants[0];
+  const templateValueCount =
+    block.templateVariants.length > 0
+      ? activeVariant?.values.length ?? 0
+      : block.templateValues.length;
 
   return (
     <div
@@ -67,12 +76,33 @@ const BlockCard = ({
         </div>
       </div>
       <div className="block__desc">{block.description}</div>
-      {block.responseTemplate || block.templateValues.length > 0 ? (
+      {block.templateVariants.length > 0 ? (
+        <div className="block__variant">
+          <span className="block__variant-label">Variant</span>
+          {onSelectVariant ? (
+            <select
+              className="block__variant-select"
+              value={activeVariant?.id ?? ""}
+              onChange={(event) => onSelectVariant(event.target.value)}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              {block.templateVariants.map((variant) => (
+                <option key={variant.id} value={variant.id}>
+                  {variant.name || "Untitled Variant"}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="block__variant-name">
+              {activeVariant?.name || "Untitled Variant"}
+            </span>
+          )}
+        </div>
+      ) : null}
+      {block.responseTemplate || templateValueCount > 0 ? (
         <div className="block__template">
           Template{" "}
-          {block.templateValues.length > 0
-            ? `(${block.templateValues.length} values)`
-            : ""}
+          {templateValueCount > 0 ? `(${templateValueCount} values)` : ""}
         </div>
       ) : null}
     </div>

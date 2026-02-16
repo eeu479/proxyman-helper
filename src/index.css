@@ -424,6 +424,35 @@ code {
   font-size: 13px;
 }
 
+.block__variant {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #cbd5f5;
+}
+
+.block__variant-label {
+  color: #94a3b8;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.block__variant-select {
+  background: #111827;
+  color: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.block__variant-name {
+  color: #e0f2fe;
+  font-weight: 600;
+}
+
 .block__template {
   color: #94a3b8;
   font-size: 12px;
@@ -456,6 +485,10 @@ code {
 
 .modal__content--wide {
   width: min(820px, 94vw);
+}
+
+.modal__content--small {
+  width: min(420px, 92vw);
 }
 
 .modal__header {
@@ -544,6 +577,13 @@ code {
   display: grid;
   gap: 10px;
 }
+
+.modal__variant-controls {
+  display: grid;
+  gap: 10px;
+  align-items: end;
+}
+
 
 .modal__section-header {
   display: flex;

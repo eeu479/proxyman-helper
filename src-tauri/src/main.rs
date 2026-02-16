@@ -89,6 +89,10 @@ struct Block {
   response_headers: HashMap<String, String>,
   #[serde(default)]
   template_values: Vec<TemplateValue>,
+  #[serde(default)]
+  template_variants: Vec<TemplateVariant>,
+  #[serde(default)]
+  active_variant_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -97,6 +101,15 @@ struct TemplateValue {
   id: String,
   key: String,
   value: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+struct TemplateVariant {
+  id: String,
+  name: String,
+  #[serde(default)]
+  values: Vec<TemplateValue>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -1165,9 +1178,10 @@ fn build_response(
 }
 
 fn build_block_response(block_match: &BlockMatch) -> (Response, LoggedResponse) {
+  let template_values = active_template_values(&block_match.block);
   let rendered = render_template(
     &block_match.block.response_template,
-    &block_match.block.template_values,
+    template_values,
   );
   let normalized = normalize_json_quotes(&rendered);
 
@@ -1199,7 +1213,7 @@ fn build_block_response(block_match: &BlockMatch) -> (Response, LoggedResponse) 
     if trimmed.is_empty() {
       continue;
     }
-    let rendered_value = render_template(value, &block_match.block.template_values);
+    let rendered_value = render_template(value, template_values);
     if let Ok(header_name) = HeaderName::from_bytes(trimmed.as_bytes()) {
       if let Ok(header_value) = HeaderValue::from_str(&rendered_value) {
         response.headers_mut().insert(header_name, header_value);
@@ -1235,6 +1249,22 @@ fn render_template(template: &str, values: &[TemplateValue]) -> String {
     output = output.replace(&needle, &value.value);
   }
   output
+}
+
+fn active_template_values(block: &Block) -> &[TemplateValue] {
+  if let Some(active_id) = block.active_variant_id.as_deref() {
+    if let Some(variant) = block
+      .template_variants
+      .iter()
+      .find(|variant| variant.id == active_id)
+    {
+      return &variant.values;
+    }
+  }
+  if let Some(variant) = block.template_variants.first() {
+    return &variant.values;
+  }
+  &block.template_values
 }
 
 fn normalize_json_quotes(value: &str) -> String {

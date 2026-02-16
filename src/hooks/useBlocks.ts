@@ -22,6 +22,8 @@ type UseBlocksReturn = {
   builderResponseTemplate: string;
   builderResponseHeaders: { id: string; key: string; value: string }[];
   builderTemplateValues: { id: string; key: string; value: string }[];
+  builderTemplateVariants: { id: string; name: string; values: { id: string; key: string; value: string }[] }[];
+  builderActiveVariantId: string | null;
   isEditingBlock: boolean;
   setIsBuilderOpen: (isOpen: boolean) => void;
   setBuilderName: (value: string) => void;
@@ -29,6 +31,10 @@ type UseBlocksReturn = {
   setBuilderPath: (value: string) => void;
   setBuilderDescription: (value: string) => void;
   setBuilderResponseTemplate: (value: string) => void;
+  setBuilderActiveVariantId: (value: string | null) => void;
+  addTemplateVariant: (name?: string) => void;
+  removeTemplateVariant: (variantId: string) => void;
+  updateTemplateVariantName: (variantId: string, value: string) => void;
   addResponseHeader: (key?: string, value?: string) => void;
   updateResponseHeader: (id: string, field: "key" | "value", value: string) => void;
   removeResponseHeader: (id: string) => void;
@@ -37,6 +43,7 @@ type UseBlocksReturn = {
   updateTemplateValue: (id: string, field: "key" | "value", value: string) => void;
   removeTemplateValue: (id: string) => void;
   editBlock: (blockId: string) => void;
+  setBlockActiveVariant: (blockId: string, variantId: string) => void;
   closeBuilder: () => void;
   handleCreateBlock: (event: FormEvent<HTMLFormElement>) => void;
   allowDrop: (event: DragEvent<HTMLDivElement>) => void;
@@ -75,16 +82,36 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
   const [builderTemplateValues, setBuilderTemplateValues] = useState<
     { id: string; key: string; value: string }[]
   >([]);
+  const [builderTemplateVariants, setBuilderTemplateVariants] = useState<
+    { id: string; name: string; values: { id: string; key: string; value: string }[] }[]
+  >([]);
+  const [builderActiveVariantId, setBuilderActiveVariantId] = useState<string | null>(null);
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
   const dragRef = useRef<{ blockId: string; source: "library" | "active" } | null>(
     null
   );
   const pointerPosRef = useRef<{ x: number; y: number } | null>(null);
 
+  useEffect(() => {
+    if (builderTemplateVariants.length === 0) {
+      if (builderActiveVariantId !== null) {
+        setBuilderActiveVariantId(null);
+      }
+      return;
+    }
+    if (!builderTemplateVariants.some((variant) => variant.id === builderActiveVariantId)) {
+      setBuilderActiveVariantId(builderTemplateVariants[0]?.id ?? null);
+    }
+  }, [builderTemplateVariants, builderActiveVariantId]);
+
   const createSeedLibrary = () =>
     initialLibrary.map((block) => ({
       ...block,
       templateValues: [...block.templateValues],
+      templateVariants: block.templateVariants.map((variant) => ({
+        ...variant,
+        values: [...variant.values],
+      })),
     }));
 
   const extractTemplateKeys = (template: string) => {
@@ -99,6 +126,41 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
       match = regex.exec(template);
     }
     return Array.from(keys);
+  };
+
+  const normalizeTemplateValues = (
+    values: { id: string; key: string; value: string }[]
+  ) =>
+    values
+      .map((item) => ({
+        ...item,
+        key: item.key.trim(),
+        value: item.value.trim(),
+      }))
+      .filter((item) => item.key.length > 0);
+
+  const ensureTemplateKeys = (
+    values: { id: string; key: string; value: string }[],
+    template: string
+  ) => {
+    const keys = extractTemplateKeys(template);
+    if (keys.length === 0) {
+      return values;
+    }
+    const keySet = new Set(keys);
+    const filtered = values.filter((item) => keySet.has(item.key));
+    const existing = new Set(filtered.map((item) => item.key));
+    const missing = keys.filter((key) => !existing.has(key));
+    if (missing.length === 0) {
+      return filtered;
+    }
+    const timestamp = Date.now();
+    const additions = missing.map((key, index) => ({
+      id: `template-${timestamp}-${filtered.length + index}`,
+      key,
+      value: "",
+    }));
+    return [...filtered, ...additions];
   };
 
   useEffect(() => {
@@ -424,6 +486,8 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     setBuilderResponseTemplate("");
     setBuilderResponseHeaders([]);
     setBuilderTemplateValues([]);
+    setBuilderTemplateVariants([]);
+    setBuilderActiveVariantId(null);
     setEditingBlockId(null);
   };
 
@@ -451,13 +515,18 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
       acc[key] = item.value.trim();
       return acc;
     }, {});
-    const templateValues = builderTemplateValues
-      .map((item) => ({
-        ...item,
-        key: item.key.trim(),
-        value: item.value.trim(),
-      }))
-      .filter((item) => item.key.length > 0);
+
+    const templateValues = normalizeTemplateValues(builderTemplateValues);
+    const templateVariants = builderTemplateVariants.map((variant, index) => ({
+      ...variant,
+      name: variant.name.trim() || `Variant ${index + 1}`,
+      values: normalizeTemplateValues(variant.values),
+    }));
+    const activeVariantId = templateVariants.some(
+      (variant) => variant.id === builderActiveVariantId
+    )
+      ? builderActiveVariantId
+      : templateVariants[0]?.id ?? null;
 
     const nextBlock: Block = {
       id: editingBlockId ?? `block-${Date.now()}`,
@@ -468,6 +537,8 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
       responseTemplate: builderResponseTemplate.trim(),
       responseHeaders,
       templateValues,
+      templateVariants,
+      activeVariantId,
     };
 
     if (builderDescription.trim()) {
@@ -499,11 +570,54 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     closeBuilder();
   };
 
+  const updateEditableTemplateValues = (
+    updater: (values: { id: string; key: string; value: string }[]) => {
+      id: string;
+      key: string;
+      value: string;
+    }[]
+  ) => {
+    if (builderTemplateVariants.length === 0) {
+      setBuilderTemplateValues((prev) => updater(prev));
+      return;
+    }
+    const activeId = builderActiveVariantId ?? builderTemplateVariants[0]?.id;
+    if (!activeId) {
+      return;
+    }
+    setBuilderTemplateVariants((prev) =>
+      prev.map((variant) =>
+        variant.id === activeId ? { ...variant, values: updater(variant.values) } : variant
+      )
+    );
+  };
+
   const addTemplateValue = (key = "", value = "") => {
-    setBuilderTemplateValues((prev) => [
+    updateEditableTemplateValues((prev) => [
       ...prev,
       { id: `template-${Date.now()}-${prev.length}`, key, value },
     ]);
+  };
+
+  const addTemplateVariant = (name = "") => {
+    const id = `variant-${Date.now()}-${builderTemplateVariants.length}`;
+    setBuilderTemplateVariants((prev) => {
+      const seedValues = prev.length === 0 ? builderTemplateValues : [];
+      const trimmedName = name.trim();
+      const nextName = trimmedName || `Variant ${prev.length + 1}`;
+      return [
+        ...prev,
+        {
+          id,
+          name: nextName,
+          values: seedValues,
+        },
+      ];
+    });
+    if (builderTemplateVariants.length === 0 && builderTemplateValues.length > 0) {
+      setBuilderTemplateValues([]);
+    }
+    setBuilderActiveVariantId(id);
   };
 
   const addResponseHeader = (key = "", value = "") => {
@@ -517,32 +631,51 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     if (!builderResponseTemplate) {
       return;
     }
-    setBuilderTemplateValues((prev) => {
-      const existing = new Set(prev.map((item) => item.key));
-      const missing = extractTemplateKeys(builderResponseTemplate).filter(
-        (key) => !existing.has(key)
-      );
-      if (missing.length === 0) {
-        return prev;
-      }
-      const timestamp = Date.now();
-      const additions = missing.map((key, index) => ({
-        id: `template-${timestamp}-${prev.length + index}`,
-        key,
-        value: "",
-      }));
-      return [...prev, ...additions];
-    });
-  }, [builderResponseTemplate]);
+    if (builderTemplateVariants.length === 0) {
+      setBuilderTemplateValues((prev) => ensureTemplateKeys(prev, builderResponseTemplate));
+      return;
+    }
+    const activeId = builderActiveVariantId ?? builderTemplateVariants[0]?.id;
+    if (!activeId) {
+      return;
+    }
+    setBuilderTemplateVariants((prev) =>
+      prev.map((variant) =>
+        variant.id === activeId
+          ? { ...variant, values: ensureTemplateKeys(variant.values, builderResponseTemplate) }
+          : variant
+      )
+    );
+  }, [builderResponseTemplate, builderActiveVariantId, builderTemplateVariants.length]);
 
   const updateTemplateValue = (id: string, field: "key" | "value", value: string) => {
-    setBuilderTemplateValues((prev) =>
+    updateEditableTemplateValues((prev) =>
       prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
     );
   };
 
   const removeTemplateValue = (id: string) => {
-    setBuilderTemplateValues((prev) => prev.filter((item) => item.id !== id));
+    updateEditableTemplateValues((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const removeTemplateVariant = (variantId: string) => {
+    setBuilderTemplateVariants((prev) => {
+      const removed = prev.find((variant) => variant.id === variantId);
+      const next = prev.filter((variant) => variant.id !== variantId);
+      if (next.length === 0 && removed) {
+        setBuilderTemplateValues(removed.values);
+        setBuilderActiveVariantId(null);
+      } else if (builderActiveVariantId === variantId) {
+        setBuilderActiveVariantId(next[0]?.id ?? null);
+      }
+      return next;
+    });
+  };
+
+  const updateTemplateVariantName = (variantId: string, value: string) => {
+    setBuilderTemplateVariants((prev) =>
+      prev.map((variant) => (variant.id === variantId ? { ...variant, name: value } : variant))
+    );
   };
 
   const updateResponseHeader = (id: string, field: "key" | "value", value: string) => {
@@ -569,6 +702,8 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
       }))
     );
     setBuilderTemplateValues([]);
+    setBuilderTemplateVariants([]);
+    setBuilderActiveVariantId(null);
     setEditingBlockId(null);
     setIsBuilderOpen(true);
   };
@@ -596,8 +731,54 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
         id: item.id || `template-${Date.now()}-${index}`,
       }))
     );
+    setBuilderTemplateVariants(
+      block.templateVariants.map((variant, variantIndex) => ({
+        ...variant,
+        id: variant.id || `variant-${Date.now()}-${variantIndex}`,
+        values: variant.values.map((item, index) => ({
+          ...item,
+          id: item.id || `template-${Date.now()}-${variantIndex}-${index}`,
+        })),
+      }))
+    );
+    setBuilderActiveVariantId(
+      block.activeVariantId ??
+        block.templateVariants[0]?.id ??
+        null
+    );
     setEditingBlockId(block.id);
     setIsBuilderOpen(true);
+  };
+
+  const setBlockActiveVariant = (blockId: string, variantId: string) => {
+    if (!selectedProfile) {
+      return;
+    }
+    const block = blockIndex.get(blockId);
+    if (!block) {
+      return;
+    }
+    const nextBlock = { ...block, activeVariantId: variantId };
+    const updateList = (items: Block[]) =>
+      items.map((item) => (item.id === blockId ? nextBlock : item));
+    const nextLibrary = updateList(libraryBlocks);
+    const nextActive = updateList(activeBlocks);
+    setLibraryBlocksByProfile((prev) => ({
+      ...prev,
+      [selectedProfile]: nextLibrary,
+    }));
+    setActiveBlocksByProfile((prev) => ({
+      ...prev,
+      [selectedProfile]: nextActive,
+    }));
+    updateBlocks(selectedProfile, {
+      libraryBlocks: nextLibrary,
+      activeBlocks: nextActive,
+    }).catch((error) => {
+      if (import.meta.env.DEV) {
+        console.error("[blocks] failed to update variant", error);
+      }
+    });
   };
 
   return {
@@ -611,6 +792,8 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     builderResponseTemplate,
     builderResponseHeaders,
     builderTemplateValues,
+    builderTemplateVariants,
+    builderActiveVariantId,
     isEditingBlock: editingBlockId !== null,
     setIsBuilderOpen,
     setBuilderName,
@@ -618,6 +801,10 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     setBuilderPath,
     setBuilderDescription,
     setBuilderResponseTemplate,
+    setBuilderActiveVariantId,
+    addTemplateVariant,
+    removeTemplateVariant,
+    updateTemplateVariantName,
     addResponseHeader,
     updateResponseHeader,
     removeResponseHeader,
@@ -626,6 +813,7 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     updateTemplateValue,
     removeTemplateValue,
     editBlock,
+    setBlockActiveVariant,
     closeBuilder,
     handleCreateBlock,
     allowDrop,
