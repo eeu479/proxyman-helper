@@ -124,6 +124,7 @@ const App = () => {
     handleDrop,
     handleDragEnd,
     handlePointerDown,
+    removeLibraryBlock,
   } = useBlocks({ profiles, selectedProfile });
 
 
@@ -154,6 +155,7 @@ const App = () => {
               onDragStart={(blockId) => handleDragStart(blockId, "library")}
               onDragEnd={handleDragEnd}
               onPointerDown={(blockId) => handlePointerDown(blockId, "library")}
+              onDeleteBlock={removeLibraryBlock}
             />
             <ActivePanel
               blocks={activeBlocks}

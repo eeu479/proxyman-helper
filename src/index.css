@@ -364,6 +364,21 @@ code {
   gap: 10px;
 }
 
+.block__meta-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.block__delete {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: #f87171;
+  cursor: pointer;
+  font-size: 12px;
+}
+
 .block__method {
   padding: 2px 8px;
   border-radius: 999px;

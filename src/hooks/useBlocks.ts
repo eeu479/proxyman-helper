@@ -51,6 +51,7 @@ type UseBlocksReturn = {
     blockId: string,
     source: "library" | "active"
   ) => (event: ReactPointerEvent<HTMLDivElement>) => void;
+  removeLibraryBlock: (blockId: string) => void;
 };
 
 const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksReturn => {
@@ -393,6 +394,25 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     };
   };
 
+  const removeLibraryBlock = (blockId: string) => {
+    if (!selectedProfile) {
+      return;
+    }
+    const nextLibrary = libraryBlocks.filter((block) => block.id !== blockId);
+    setLibraryBlocksByProfile((prev) => ({
+      ...prev,
+      [selectedProfile]: nextLibrary,
+    }));
+    updateBlocks(selectedProfile, {
+      libraryBlocks: nextLibrary,
+      activeBlocks,
+    }).catch((error) => {
+      if (import.meta.env.DEV) {
+        console.error("[blocks] failed to delete block", error);
+      }
+    });
+  };
+
   const resetBuilder = () => {
     setBuilderName("");
     setBuilderMethod("GET");
@@ -567,6 +587,7 @@ const useBlocks = ({ profiles, selectedProfile }: UseBlocksParams): UseBlocksRet
     handleDrop,
     handleDragEnd,
     handlePointerDown,
+    removeLibraryBlock,
   };
 };
 

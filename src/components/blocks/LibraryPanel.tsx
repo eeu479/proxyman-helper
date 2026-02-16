@@ -11,6 +11,7 @@ type LibraryPanelProps = {
   onDragStart: (blockId: string) => DragEventHandler<HTMLDivElement>;
   onDragEnd: () => void;
   onPointerDown: (blockId: string) => PointerEventHandler<HTMLDivElement>;
+  onDeleteBlock: (blockId: string) => void;
 };
 
 const LibraryPanel = ({
@@ -22,6 +23,7 @@ const LibraryPanel = ({
   onDragStart,
   onDragEnd,
   onPointerDown,
+  onDeleteBlock,
 }: LibraryPanelProps) => {
   return (
     <section className="panel">
@@ -52,6 +54,7 @@ const LibraryPanel = ({
               onDragStart={onDragStart(block.id)}
               onDragEnd={onDragEnd}
               onPointerDown={onPointerDown(block.id)}
+              onDelete={() => onDeleteBlock(block.id)}
             />
           ))
         )}

@@ -8,6 +8,7 @@ type BlockCardProps = {
   onDragStart?: DragEventHandler<HTMLDivElement>;
   onDragEnd?: DragEventHandler<HTMLDivElement>;
   onPointerDown?: PointerEventHandler<HTMLDivElement>;
+  onDelete?: () => void;
 };
 
 const BlockCard = ({
@@ -17,6 +18,7 @@ const BlockCard = ({
   onDragStart,
   onDragEnd,
   onPointerDown,
+  onDelete,
 }: BlockCardProps) => {
   const cardClassName = className ? `block ${className}` : "block";
 
@@ -29,10 +31,24 @@ const BlockCard = ({
       onPointerDown={onPointerDown}
     >
       <div className="block__meta">
-        <span className={`block__method block__method--${block.method.toLowerCase()}`}>
-          {block.method}
-        </span>
-        <span className="block__name">{block.name}</span>
+        <div className="block__meta-left">
+          <span className={`block__method block__method--${block.method.toLowerCase()}`}>
+            {block.method}
+          </span>
+          <span className="block__name">{block.name}</span>
+        </div>
+        {onDelete ? (
+          <button
+            className="block__delete"
+            type="button"
+            onClick={onDelete}
+            onPointerDown={(event) => event.stopPropagation()}
+            onDragStart={(event) => event.stopPropagation()}
+            aria-label={`Delete ${block.name}`}
+          >
+            Delete
+          </button>
+        ) : null}
       </div>
       <div className="block__desc">{block.description}</div>
       {block.responseTemplate || block.templateValues.length > 0 ? (

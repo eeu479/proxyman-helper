@@ -1169,13 +1169,22 @@ fn build_block_response(block_match: &BlockMatch) -> (Response, LoggedResponse) 
     &block_match.block.response_template,
     &block_match.block.template_values,
   );
+  let normalized = normalize_json_quotes(&rendered);
+
+  let parsed_json = if rendered.trim().is_empty() {
+    None
+  } else if let Ok(value) = serde_json::from_str::<Value>(&rendered) {
+    Some(value)
+  } else {
+    serde_json::from_str::<Value>(&normalized).ok()
+  };
 
   let mut response = if rendered.trim().is_empty() {
     StatusCode::OK.into_response()
-  } else if let Ok(value) = serde_json::from_str::<Value>(&rendered) {
+  } else if let Some(value) = parsed_json.clone() {
     Json(value).into_response()
   } else {
-    let mut response = Response::new(Body::from(rendered.clone()));
+    let mut response = Response::new(Body::from(normalized.clone()));
     if let Ok(header_value) = HeaderValue::from_str("text/plain; charset=utf-8") {
       response
         .headers_mut()
@@ -1201,10 +1210,10 @@ fn build_block_response(block_match: &BlockMatch) -> (Response, LoggedResponse) 
 
   let body = if rendered.trim().is_empty() {
     None
-  } else if let Ok(value) = serde_json::from_str::<Value>(&rendered) {
+  } else if let Some(value) = parsed_json {
     serde_json::to_string_pretty(&value).ok()
   } else {
-    Some(rendered)
+    Some(normalized)
   };
 
   let logged_response = LoggedResponse {
@@ -1226,6 +1235,10 @@ fn render_template(template: &str, values: &[TemplateValue]) -> String {
     output = output.replace(&needle, &value.value);
   }
   output
+}
+
+fn normalize_json_quotes(value: &str) -> String {
+  value.replace('\u{201C}', "\"").replace('\u{201D}', "\"")
 }
 
 fn header_map_to_string_map(headers: &HeaderMap) -> HashMap<String, String> {
