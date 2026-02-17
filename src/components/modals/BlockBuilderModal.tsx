@@ -503,7 +503,7 @@ const BlockBuilderModal = ({
                 )}
               </div>
 
-              {/* Template Values */}
+              {/* Template Values — Table: Key | Value | Type | Actions. Row = cohesive unit; Enter adds row; Backspace in empty key removes row. */}
               <div className="modal__section">
                 <div className="modal__section-header">
                   <span>
@@ -524,128 +524,213 @@ const BlockBuilderModal = ({
                   </button>
                 </div>
                 {visibleTemplateValues.length === 0 ? (
-                  <div className="modal__empty">
+                  <div className="modal__empty modal__empty--template">
                     Define variables used in your response template
                   </div>
                 ) : (
-                  <div className="modal__template-list">
-                    {visibleTemplateValues.map((item) => {
-                      const type = item.valueType ?? "string";
-                      const arrayItems = parseArrayValue(item.value);
-                      return (
-                        <div key={item.id} className="modal__template-entry">
-                          <div className="modal__template-row modal__template-row--4col">
-                            <input
-                              className="modal__input"
-                              type="text"
-                              placeholder="key"
-                              value={item.key}
-                              onChange={(event) =>
-                                onUpdateTemplateValue(
-                                  item.id,
-                                  "key",
-                                  event.target.value,
-                                )
-                              }
-                            />
-                            <div className="modal__type-toggle">
-                              <button
-                                className={`modal__type-btn${type === "string" ? " is-active" : ""}`}
-                                type="button"
-                                onClick={() =>
-                                  onUpdateTemplateValueType(item.id, "string")
+                  <div
+                    className="modal__template-table"
+                    role="table"
+                    aria-label="Template values"
+                  >
+                    <div className="modal__template-thead" role="rowgroup">
+                      <div
+                        className="modal__template-th modal__template-th--key"
+                        role="columnheader"
+                      >
+                        Key
+                      </div>
+                      <div
+                        className="modal__template-th modal__template-th--value"
+                        role="columnheader"
+                      >
+                        Value
+                      </div>
+                      <div
+                        className="modal__template-th modal__template-th--type"
+                        role="columnheader"
+                      >
+                        Type
+                      </div>
+                      <div
+                        className="modal__template-th modal__template-th--action"
+                        role="columnheader"
+                      >
+                        {" "}
+                      </div>
+                    </div>
+                    <div className="modal__template-tbody" role="rowgroup">
+                      {visibleTemplateValues.map((item, index) => {
+                        const type = item.valueType ?? "string";
+                        const arrayItems = parseArrayValue(item.value);
+                        const isOnlyRow =
+                          visibleTemplateValues.length === 1;
+                        return (
+                          <div
+                            key={item.id}
+                            className="modal__template-tr"
+                            role="row"
+                          >
+                            <div
+                              className="modal__template-td modal__template-td--key"
+                              role="cell"
+                            >
+                              <input
+                                className="modal__input modal__input--row"
+                                type="text"
+                                placeholder="key"
+                                value={item.key}
+                                onChange={(event) =>
+                                  onUpdateTemplateValue(
+                                    item.id,
+                                    "key",
+                                    event.target.value,
+                                  )
                                 }
-                              >
-                                Str
-                              </button>
-                              <button
-                                className={`modal__type-btn${type === "array" ? " is-active" : ""}`}
-                                type="button"
-                                onClick={() =>
-                                  onUpdateTemplateValueType(item.id, "array")
-                                }
-                              >
-                                {"[ ]"}
-                              </button>
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    onAddTemplateValue();
+                                  }
+                                  if (
+                                    e.key === "Backspace" &&
+                                    !item.key &&
+                                    !isOnlyRow
+                                  ) {
+                                    e.preventDefault();
+                                    onRemoveTemplateValue(item.id);
+                                  }
+                                }}
+                              />
                             </div>
-                            <button
-                              className="modal__icon-btn"
-                              type="button"
-                              onClick={() =>
-                                onAddTemplateValue(item.key, item.value)
-                              }
-                              aria-label="Duplicate template value"
-                              title="Duplicate"
+                            <div
+                              className="modal__template-td modal__template-td--value"
+                              role="cell"
                             >
-                              ⊕
-                            </button>
-                            <button
-                              className="modal__remove"
-                              type="button"
-                              onClick={() => onRemoveTemplateValue(item.id)}
-                              aria-label="Remove template value"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                          {type === "string" ? (
-                            <input
-                              className="modal__input"
-                              type="text"
-                              placeholder="value"
-                              value={item.value}
-                              onChange={(event) =>
-                                onUpdateTemplateValue(
-                                  item.id,
-                                  "value",
-                                  event.target.value,
-                                )
-                              }
-                            />
-                          ) : (
-                            <div className="modal__array-editor">
-                              {arrayItems.map((arrayItem, index) => (
-                                <div
-                                  key={index}
-                                  className="modal__array-item"
-                                >
-                                  <input
-                                    className="modal__input"
-                                    type="text"
-                                    placeholder={`item ${index + 1}`}
-                                    value={arrayItem}
-                                    onChange={(event) =>
-                                      onUpdateArrayItem(
-                                        item.id,
-                                        index,
-                                        event.target.value,
-                                      )
+                              {type === "string" ? (
+                                <input
+                                  className="modal__input modal__input--row"
+                                  type="text"
+                                  placeholder="value"
+                                  value={item.value}
+                                  onChange={(event) =>
+                                    onUpdateTemplateValue(
+                                      item.id,
+                                      "value",
+                                      event.target.value,
+                                    )
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      onAddTemplateValue();
                                     }
-                                  />
+                                  }}
+                                />
+                              ) : (
+                                <div className="modal__template-array">
+                                  {arrayItems.map((arrayItem, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="modal__template-chip"
+                                    >
+                                      <input
+                                        className="modal__input modal__input--chip"
+                                        type="text"
+                                        placeholder="item"
+                                        value={arrayItem}
+                                        onChange={(event) =>
+                                          onUpdateArrayItem(
+                                            item.id,
+                                            idx,
+                                            event.target.value,
+                                          )
+                                        }
+                                        aria-label={`Array item ${idx + 1}`}
+                                      />
+                                      <button
+                                        type="button"
+                                        className="modal__template-chip-remove"
+                                        onClick={() =>
+                                          onRemoveArrayItem(item.id, idx)
+                                        }
+                                        aria-label="Remove array item"
+                                      >
+                                        ×
+                                      </button>
+                                    </span>
+                                  ))}
                                   <button
-                                    className="modal__remove"
                                     type="button"
-                                    onClick={() =>
-                                      onRemoveArrayItem(item.id, index)
-                                    }
-                                    aria-label="Remove array item"
+                                    className="modal__template-array-add"
+                                    onClick={() => onAddArrayItem(item.id)}
                                   >
-                                    ×
+                                    + Add
                                   </button>
                                 </div>
-                              ))}
-                              <button
-                                className="modal__array-add"
-                                type="button"
-                                onClick={() => onAddArrayItem(item.id)}
-                              >
-                                + Add Item
-                              </button>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                            <div
+                              className="modal__template-td modal__template-td--type"
+                              role="cell"
+                            >
+                              <div
+                                className="modal__type-toggle"
+                                role="group"
+                                aria-label="Value type"
+                              >
+                                <button
+                                  className={`modal__type-btn${type === "string" ? " is-active" : ""}`}
+                                  type="button"
+                                  onClick={() =>
+                                    onUpdateTemplateValueType(
+                                      item.id,
+                                      "string",
+                                    )
+                                  }
+                                  aria-pressed={type === "string"}
+                                  aria-label="String"
+                                >
+                                  Str
+                                </button>
+                                <button
+                                  className={`modal__type-btn${type === "array" ? " is-active" : ""}`}
+                                  type="button"
+                                  onClick={() =>
+                                    onUpdateTemplateValueType(
+                                      item.id,
+                                      "array",
+                                    )
+                                  }
+                                  aria-pressed={type === "array"}
+                                  aria-label="Array"
+                                >
+                                  {"[ ]"}
+                                </button>
+                              </div>
+                            </div>
+                            <div
+                              className="modal__template-td modal__template-td--action"
+                              role="cell"
+                            >
+                              <div className="modal__template-actions">
+                                <button
+                                  className="modal__template-action modal__template-action--del"
+                                  type="button"
+                                  onClick={() =>
+                                    onRemoveTemplateValue(item.id)
+                                  }
+                                  aria-label="Remove row"
+                                  title="Remove"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
