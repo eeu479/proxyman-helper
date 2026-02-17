@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchBlocks, updateBlocks } from "../api/blocks";
 import type { RequestLogEntry } from "../api/logs";
 import { initialLibrary } from "../data/initialData";
-import type { Block } from "../types/block";
+import type { Block, TemplateValue, TemplateValueType } from "../types/block";
 import type { Profile } from "../types/profile";
 
 type UseBlocksParams = {
@@ -26,11 +26,11 @@ type UseBlocksReturn = {
   builderCategory: string;
   builderResponseTemplate: string;
   builderResponseHeaders: { id: string; key: string; value: string }[];
-  builderTemplateValues: { id: string; key: string; value: string }[];
+  builderTemplateValues: TemplateValue[];
   builderTemplateVariants: {
     id: string;
     name: string;
-    values: { id: string; key: string; value: string }[];
+    values: TemplateValue[];
   }[];
   builderActiveVariantId: string | null;
   isEditingBlock: boolean;
@@ -60,6 +60,10 @@ type UseBlocksReturn = {
     value: string,
   ) => void;
   removeTemplateValue: (id: string) => void;
+  updateTemplateValueType: (id: string, valueType: TemplateValueType) => void;
+  addArrayItem: (valueId: string) => void;
+  updateArrayItem: (valueId: string, index: number, text: string) => void;
+  removeArrayItem: (valueId: string, index: number) => void;
   editBlock: (blockId: string) => void;
   setBlockActiveVariant: (blockId: string, variantId: string) => void;
   closeBuilder: () => void;
@@ -90,6 +94,7 @@ type UseBlocksReturn = {
   renameCategory: (oldName: string, newName: string) => void;
   deleteCategory: (name: string) => void;
   moveBlockToCategory: (blockId: string, category: string) => void;
+  removeBlockFromActive: (blockId: string) => void;
 };
 
 const useBlocks = ({
@@ -116,13 +121,13 @@ const useBlocks = ({
     { id: string; key: string; value: string }[]
   >([]);
   const [builderTemplateValues, setBuilderTemplateValues] = useState<
-    { id: string; key: string; value: string }[]
+    TemplateValue[]
   >([]);
   const [builderTemplateVariants, setBuilderTemplateVariants] = useState<
     {
       id: string;
       name: string;
-      values: { id: string; key: string; value: string }[];
+      values: TemplateValue[];
     }[]
   >([]);
   const [builderActiveVariantId, setBuilderActiveVariantId] = useState<
@@ -176,9 +181,7 @@ const useBlocks = ({
     return Array.from(keys);
   };
 
-  const normalizeTemplateValues = (
-    values: { id: string; key: string; value: string }[],
-  ) =>
+  const normalizeTemplateValues = (values: TemplateValue[]) =>
     values
       .map((item) => ({
         ...item,
@@ -187,10 +190,7 @@ const useBlocks = ({
       }))
       .filter((item) => item.key.length > 0);
 
-  const ensureTemplateKeys = (
-    values: { id: string; key: string; value: string }[],
-    template: string,
-  ) => {
+  const ensureTemplateKeys = (values: TemplateValue[], template: string) => {
     const keys = extractTemplateKeys(template);
     if (keys.length === 0) {
       return values;
@@ -207,6 +207,7 @@ const useBlocks = ({
       id: `template-${timestamp}-${filtered.length + index}`,
       key,
       value: "",
+      valueType: "string" as TemplateValueType,
     }));
     return [...filtered, ...additions];
   };
@@ -679,11 +680,7 @@ const useBlocks = ({
   };
 
   const updateEditableTemplateValues = (
-    updater: (values: { id: string; key: string; value: string }[]) => {
-      id: string;
-      key: string;
-      value: string;
-    }[],
+    updater: (values: TemplateValue[]) => TemplateValue[],
   ) => {
     if (builderTemplateVariants.length === 0) {
       setBuilderTemplateValues((prev) => updater(prev));
@@ -702,11 +699,72 @@ const useBlocks = ({
     );
   };
 
-  const addTemplateValue = (key = "", value = "") => {
+  const addTemplateValue = (
+    key = "",
+    value = "",
+    valueType: TemplateValueType = "string",
+  ) => {
     updateEditableTemplateValues((prev) => [
       ...prev,
-      { id: `template-${Date.now()}-${prev.length}`, key, value },
+      {
+        id: `template-${Date.now()}-${prev.length}`,
+        key,
+        value,
+        valueType,
+      },
     ]);
+  };
+
+  const parseArrayValue = (value: string): string[] => {
+    if (!value) return [];
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (Array.isArray(parsed)) return parsed as string[];
+      return [];
+    } catch {
+      return [];
+    }
+  };
+
+  const updateTemplateValueType = (id: string, valueType: TemplateValueType) => {
+    updateEditableTemplateValues((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, valueType, value: "" } : item,
+      ),
+    );
+  };
+
+  const addArrayItem = (valueId: string) => {
+    updateEditableTemplateValues((prev) =>
+      prev.map((item) => {
+        if (item.id !== valueId) return item;
+        const arr = parseArrayValue(item.value);
+        return { ...item, value: JSON.stringify([...arr, ""]) };
+      }),
+    );
+  };
+
+  const updateArrayItem = (valueId: string, index: number, text: string) => {
+    updateEditableTemplateValues((prev) =>
+      prev.map((item) => {
+        if (item.id !== valueId) return item;
+        const arr = parseArrayValue(item.value);
+        const next = [...arr];
+        next[index] = text;
+        return { ...item, value: JSON.stringify(next) };
+      }),
+    );
+  };
+
+  const removeArrayItem = (valueId: string, index: number) => {
+    updateEditableTemplateValues((prev) =>
+      prev.map((item) => {
+        if (item.id !== valueId) return item;
+        const arr = parseArrayValue(item.value);
+        const next = arr.filter((_, i) => i !== index);
+        return { ...item, value: JSON.stringify(next) };
+      }),
+    );
   };
 
   const addTemplateVariant = (name = "") => {
@@ -1099,6 +1157,10 @@ const useBlocks = ({
     addTemplateValue,
     updateTemplateValue,
     removeTemplateValue,
+    updateTemplateValueType,
+    addArrayItem,
+    updateArrayItem,
+    removeArrayItem,
     editBlock,
     setBlockActiveVariant,
     closeBuilder,

@@ -1,7 +1,18 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
-import type { TemplateValue } from "../../types/block";
+import type { TemplateValue, TemplateValueType } from "../../types/block";
 import Modal from "./Modal";
+
+const parseArrayValue = (value: string): string[] => {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (Array.isArray(parsed)) return parsed as string[];
+    return [];
+  } catch {
+    return [];
+  }
+};
 
 type BlockBuilderModalProps = {
   isOpen: boolean;
@@ -44,6 +55,10 @@ type BlockBuilderModalProps = {
     value: string,
   ) => void;
   onRemoveTemplateValue: (id: string) => void;
+  onUpdateTemplateValueType: (id: string, valueType: TemplateValueType) => void;
+  onAddArrayItem: (valueId: string) => void;
+  onUpdateArrayItem: (valueId: string, index: number, text: string) => void;
+  onRemoveArrayItem: (valueId: string, index: number) => void;
 };
 
 const BlockBuilderModal = ({
@@ -75,6 +90,10 @@ const BlockBuilderModal = ({
   onAddTemplateValue,
   onUpdateTemplateValue,
   onRemoveTemplateValue,
+  onUpdateTemplateValueType,
+  onAddArrayItem,
+  onUpdateArrayItem,
+  onRemoveArrayItem,
 }: BlockBuilderModalProps) => {
   const [activeTab, setActiveTab] = useState<"response" | "headers">(
     "response",
@@ -297,7 +316,7 @@ const BlockBuilderModal = ({
                   <button
                     className="panel__action panel__action--ghost"
                     type="button"
-                    onClick={onAddTemplateValue}
+                    onClick={() => onAddTemplateValue()}
                   >
                     Add Value
                   </button>
@@ -306,44 +325,112 @@ const BlockBuilderModal = ({
                   <div className="modal__empty">No template values yet.</div>
                 ) : (
                   <div className="modal__template-list">
-                    {visibleTemplateValues.map((item) => (
-                      <div key={item.id} className="modal__template-row">
-                        <input
-                          className="modal__input"
-                          type="text"
-                          placeholder="key"
-                          value={item.key}
-                          onChange={(event) =>
-                            onUpdateTemplateValue(
-                              item.id,
-                              "key",
-                              event.target.value,
-                            )
-                          }
-                        />
-                        <input
-                          className="modal__input"
-                          type="text"
-                          placeholder="value"
-                          value={item.value}
-                          onChange={(event) =>
-                            onUpdateTemplateValue(
-                              item.id,
-                              "value",
-                              event.target.value,
-                            )
-                          }
-                        />
-                        <button
-                          className="modal__remove"
-                          type="button"
-                          onClick={() => onRemoveTemplateValue(item.id)}
-                          aria-label="Remove template value"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
+                    {visibleTemplateValues.map((item) => {
+                      const type = item.valueType ?? "string";
+                      const arrayItems = parseArrayValue(item.value);
+                      return (
+                        <div key={item.id} className="modal__template-entry">
+                          <div className="modal__template-row">
+                            <input
+                              className="modal__input"
+                              type="text"
+                              placeholder="key"
+                              value={item.key}
+                              onChange={(event) =>
+                                onUpdateTemplateValue(
+                                  item.id,
+                                  "key",
+                                  event.target.value,
+                                )
+                              }
+                            />
+                            <div className="modal__type-toggle">
+                              <button
+                                className={`modal__type-btn${type === "string" ? " is-active" : ""}`}
+                                type="button"
+                                onClick={() =>
+                                  onUpdateTemplateValueType(item.id, "string")
+                                }
+                              >
+                                Str
+                              </button>
+                              <button
+                                className={`modal__type-btn${type === "array" ? " is-active" : ""}`}
+                                type="button"
+                                onClick={() =>
+                                  onUpdateTemplateValueType(item.id, "array")
+                                }
+                              >
+                                {"[ ]"}
+                              </button>
+                            </div>
+                            <button
+                              className="modal__remove"
+                              type="button"
+                              onClick={() => onRemoveTemplateValue(item.id)}
+                              aria-label="Remove template value"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                          {type === "string" ? (
+                            <input
+                              className="modal__input"
+                              type="text"
+                              placeholder="value"
+                              value={item.value}
+                              onChange={(event) =>
+                                onUpdateTemplateValue(
+                                  item.id,
+                                  "value",
+                                  event.target.value,
+                                )
+                              }
+                            />
+                          ) : (
+                            <div className="modal__array-editor">
+                              {arrayItems.map((arrayItem, index) => (
+                                <div
+                                  key={index}
+                                  className="modal__array-item"
+                                >
+                                  <input
+                                    className="modal__input"
+                                    type="text"
+                                    placeholder={`item ${index + 1}`}
+                                    value={arrayItem}
+                                    onChange={(event) =>
+                                      onUpdateArrayItem(
+                                        item.id,
+                                        index,
+                                        event.target.value,
+                                      )
+                                    }
+                                  />
+                                  <button
+                                    className="modal__remove"
+                                    type="button"
+                                    onClick={() =>
+                                      onRemoveArrayItem(item.id, index)
+                                    }
+                                    aria-label="Remove array item"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ))}
+                              <button
+                                className="modal__array-add"
+                                type="button"
+                                onClick={() => onAddArrayItem(item.id)}
+                              >
+                                + Add Item
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -355,7 +442,7 @@ const BlockBuilderModal = ({
                 <button
                   className="panel__action panel__action--ghost"
                   type="button"
-                  onClick={onAddResponseHeader}
+                  onClick={() => onAddResponseHeader()}
                 >
                   Add Header
                 </button>

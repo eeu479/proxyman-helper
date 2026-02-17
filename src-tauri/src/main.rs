@@ -99,12 +99,18 @@ struct Block {
   category: String,
 }
 
+fn default_value_type() -> String {
+  "string".to_string()
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 struct TemplateValue {
   id: String,
   key: String,
   value: String,
+  #[serde(default = "default_value_type")]
+  value_type: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -1371,6 +1377,7 @@ fn merged_template_values(block_match: &BlockMatch) -> Vec<TemplateValue> {
       id: format!("path-param-{}", key),
       key: key.clone(),
       value: value.clone(),
+      value_type: "string".to_string(),
     });
   }
   values

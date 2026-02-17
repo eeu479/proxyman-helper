@@ -1,7 +1,10 @@
+export type TemplateValueType = "string" | "array";
+
 export type TemplateValue = {
   id: string;
   key: string;
   value: string;
+  valueType?: TemplateValueType;
 };
 
 export type TemplateVariant = {

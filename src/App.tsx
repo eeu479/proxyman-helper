@@ -135,6 +135,10 @@ const App = () => {
     addTemplateValue,
     updateTemplateValue,
     removeTemplateValue,
+    updateTemplateValueType,
+    addArrayItem,
+    updateArrayItem,
+    removeArrayItem,
     closeBuilder,
     handleCreateBlock,
     allowDrop,
@@ -386,6 +390,10 @@ const App = () => {
         onAddTemplateValue={addTemplateValue}
         onUpdateTemplateValue={updateTemplateValue}
         onRemoveTemplateValue={removeTemplateValue}
+        onUpdateTemplateValueType={updateTemplateValueType}
+        onAddArrayItem={addArrayItem}
+        onUpdateArrayItem={updateArrayItem}
+        onRemoveArrayItem={removeArrayItem}
       />
 
       <CreateProfileModal
