@@ -1,5 +1,6 @@
 import type { DragEventHandler, PointerEventHandler } from "react";
 import type { Block } from "../../types/block";
+import { parseArrayItems } from "../../types/block";
 
 type BlockCardProps = {
   block: Block;
@@ -14,6 +15,12 @@ type BlockCardProps = {
   onExport?: () => void;
   onRemoveFromActive?: () => void;
   onSelectVariant?: (variantId: string) => void;
+  onSetArrayItemEnabled?: (
+    blockId: string,
+    valueId: string,
+    index: number,
+    enabled: boolean,
+  ) => void;
 };
 
 const METHOD_LABELS: Record<string, string> = {
@@ -37,6 +44,7 @@ const BlockCard = ({
   onExport,
   onRemoveFromActive,
   onSelectVariant,
+  onSetArrayItemEnabled,
 }: BlockCardProps) => {
   const method = block.method.toUpperCase();
   const cardClassName = [
@@ -55,6 +63,15 @@ const BlockCard = ({
     block.templateVariants.length > 0
       ? (activeVariant?.values.length ?? 0)
       : block.templateValues.length;
+
+  const visibleValues =
+    block.templateVariants.length > 0
+      ? (activeVariant?.values ?? [])
+      : block.templateValues;
+  const arrayTemplateValues = visibleValues.filter((item) => {
+    if ((item.valueType ?? "string") !== "array") return false;
+    return parseArrayItems(item.value).length > 0;
+  });
 
   const stopDrag = (event: { stopPropagation: () => void }) =>
     event.stopPropagation();
@@ -161,6 +178,50 @@ const BlockCard = ({
                     {activeVariant?.name || "Untitled"}
                   </span>
                 )}
+              </div>
+            ) : null}
+            {compact &&
+            onSetArrayItemEnabled &&
+            arrayTemplateValues.length > 0 ? (
+              <div
+                className="block__array-section"
+                onPointerDown={stopDrag}
+                onDragStart={stopDrag}
+              >
+                {arrayTemplateValues.map((item) => {
+                  const items = parseArrayItems(item.value);
+                  return (
+                    <div key={item.id} className="block__array-row">
+                      <span className="block__array-key">{item.key}</span>
+                      <div className="block__array-chips">
+                        {items.map((entry, idx) => (
+                          <label
+                            key={idx}
+                            className={`block__array-chip${entry.e === false ? " block__array-chip--disabled" : ""}`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="block__array-toggle"
+                              checked={entry.e !== false}
+                              onChange={(e) =>
+                                onSetArrayItemEnabled(
+                                  block.id,
+                                  item.id,
+                                  idx,
+                                  e.target.checked,
+                                )
+                              }
+                              aria-label={`Include ${item.key} item in response`}
+                            />
+                            <span className="block__array-chip-value">
+                              {entry.v || "—"}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : null}
           </>

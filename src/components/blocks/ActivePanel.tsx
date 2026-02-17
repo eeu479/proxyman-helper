@@ -14,6 +14,12 @@ type ActivePanelProps = {
   onRemoveFromActive: (blockId: string) => void;
   onClearActive: () => void;
   onSelectVariant: (blockId: string, variantId: string) => void;
+  onSetBlockArrayItemEnabled?: (
+    blockId: string,
+    valueId: string,
+    index: number,
+    enabled: boolean,
+  ) => void;
 };
 
 const ActivePanel = ({
@@ -28,6 +34,7 @@ const ActivePanel = ({
   onRemoveFromActive,
   onClearActive,
   onSelectVariant,
+  onSetBlockArrayItemEnabled,
 }: ActivePanelProps) => {
   return (
     <section className="panel panel--active">
@@ -74,6 +81,7 @@ const ActivePanel = ({
                 onSelectVariant={(variantId) =>
                   onSelectVariant(block.id, variantId)
                 }
+                onSetArrayItemEnabled={onSetBlockArrayItemEnabled}
               />
             ))}
           </div>

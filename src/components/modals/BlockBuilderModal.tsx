@@ -1,23 +1,13 @@
 import type { FormEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import type { TemplateValue, TemplateValueType } from "../../types/block";
+import { parseArrayItems } from "../../types/block";
 import Modal from "./Modal";
 
 /** Replace curly/smart quotes with straight ASCII quotes. */
 const normalizeStraightQuotes = (s: string): string =>
   s.replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"')
    .replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'");
-
-const parseArrayValue = (value: string): string[] => {
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    if (Array.isArray(parsed)) return parsed as string[];
-    return [];
-  } catch {
-    return [];
-  }
-};
 
 type BlockBuilderModalProps = {
   isOpen: boolean;
@@ -65,6 +55,11 @@ type BlockBuilderModalProps = {
   onAddArrayItem: (valueId: string) => void;
   onUpdateArrayItem: (valueId: string, index: number, text: string) => void;
   onRemoveArrayItem: (valueId: string, index: number) => void;
+  onSetArrayItemEnabled: (
+    valueId: string,
+    index: number,
+    enabled: boolean,
+  ) => void;
 };
 
 const BlockBuilderModal = ({
@@ -101,6 +96,7 @@ const BlockBuilderModal = ({
   onAddArrayItem,
   onUpdateArrayItem,
   onRemoveArrayItem,
+  onSetArrayItemEnabled,
 }: BlockBuilderModalProps) => {
   const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
   const [editingVariantId, setEditingVariantId] = useState<string | null>(null);
@@ -562,7 +558,7 @@ const BlockBuilderModal = ({
                     <div className="modal__template-tbody" role="rowgroup">
                       {visibleTemplateValues.map((item, index) => {
                         const type = item.valueType ?? "string";
-                        const arrayItems = parseArrayValue(item.value);
+                        const arrayItems = parseArrayItems(item.value);
                         const isOnlyRow =
                           visibleTemplateValues.length === 1;
                         return (
@@ -632,13 +628,27 @@ const BlockBuilderModal = ({
                                   {arrayItems.map((arrayItem, idx) => (
                                     <span
                                       key={idx}
-                                      className="modal__template-chip"
+                                      className={`modal__template-chip${arrayItem.e === false ? " modal__template-chip--disabled" : ""}`}
                                     >
+                                      <label className="modal__template-chip-toggle">
+                                        <input
+                                          type="checkbox"
+                                          checked={arrayItem.e !== false}
+                                          onChange={(event) =>
+                                            onSetArrayItemEnabled(
+                                              item.id,
+                                              idx,
+                                              event.target.checked,
+                                            )
+                                          }
+                                          aria-label="Include item in response"
+                                        />
+                                      </label>
                                       <input
                                         className="modal__input modal__input--chip"
                                         type="text"
                                         placeholder="item"
-                                        value={arrayItem}
+                                        value={arrayItem.v}
                                         onChange={(event) =>
                                           onUpdateArrayItem(
                                             item.id,

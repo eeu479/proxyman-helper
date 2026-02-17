@@ -860,6 +860,77 @@ body[data-theme="light"] .sidebar__select {
   opacity: 0.7;
 }
 
+/* Array toggles on card (compact) */
+.block__array-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+  margin-top: 4px;
+  border-top: 1px solid var(--color-border-soft);
+}
+
+.block__array-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.block__array-key {
+  font-family: "JetBrains Mono", "SFMono-Regular", ui-monospace, monospace;
+  font-size: 9px;
+  color: var(--color-text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.block__array-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.block__array-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--color-border-soft);
+  border: 1px solid var(--color-border-ghost);
+  border-radius: 6px;
+  padding: 2px 6px 2px 4px;
+  font-size: 10px;
+  cursor: pointer;
+  max-width: 100%;
+}
+
+.block__array-chip--disabled {
+  opacity: 0.6;
+}
+
+.block__array-chip--disabled .block__array-chip-value {
+  color: var(--color-text-subtle);
+}
+
+.block__array-toggle {
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.block__array-chip-value {
+  font-family: "JetBrains Mono", "SFMono-Regular", ui-monospace, monospace;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
 .modal {
   position: fixed;
   inset: 0;
@@ -1462,12 +1533,36 @@ body[data-theme="light"] .sidebar__select {
 .modal__template-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   background: var(--color-border-soft);
   border: 1px solid var(--color-border-ghost);
   border-radius: 8px;
   padding: 2px 6px 2px 8px;
   max-width: 100%;
+}
+
+.modal__template-chip--disabled {
+  opacity: 0.6;
+}
+
+.modal__template-chip--disabled .modal__input--chip {
+  text-decoration: line-through;
+  color: var(--color-text-subtle);
+}
+
+.modal__template-chip-toggle {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.modal__template-chip-toggle input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
 }
 
 .modal__input--chip {

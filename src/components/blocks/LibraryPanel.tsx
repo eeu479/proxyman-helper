@@ -72,6 +72,12 @@ type LibraryPanelProps = {
   onEditBlock: (blockId: string) => void;
   onExportBlock?: (block: Block) => void;
   onSelectVariant: (blockId: string, variantId: string) => void;
+  onSetBlockArrayItemEnabled?: (
+    blockId: string,
+    valueId: string,
+    index: number,
+    enabled: boolean,
+  ) => void;
   onAddCategory: (name: string) => void;
   onRenameCategory: (oldName: string, newName: string) => void;
   onDeleteCategory: (name: string) => void;
@@ -94,6 +100,7 @@ const LibraryPanel = ({
   onEditBlock,
   onExportBlock,
   onSelectVariant,
+  onSetBlockArrayItemEnabled,
   onAddCategory,
   onRenameCategory,
   onDeleteCategory,
@@ -323,6 +330,7 @@ const LibraryPanel = ({
                         onSelectVariant={(variantId) =>
                           onSelectVariant(block.id, variantId)
                         }
+                        onSetArrayItemEnabled={onSetBlockArrayItemEnabled}
                       />
                     ))}
                   </div>

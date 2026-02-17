@@ -8,6 +8,7 @@ import { fetchBlocks, updateBlocks } from "../api/blocks";
 import type { RequestLogEntry } from "../api/logs";
 import { initialLibrary } from "../data/initialData";
 import type { Block, TemplateValue, TemplateValueType } from "../types/block";
+import { parseArrayItems } from "../types/block";
 import type { Profile } from "../types/profile";
 
 type UseBlocksParams = {
@@ -64,6 +65,7 @@ type UseBlocksReturn = {
   addArrayItem: (valueId: string) => void;
   updateArrayItem: (valueId: string, index: number, text: string) => void;
   removeArrayItem: (valueId: string, index: number) => void;
+  setArrayItemEnabled: (valueId: string, index: number, enabled: boolean) => void;
   editBlock: (blockId: string) => void;
   setBlockActiveVariant: (blockId: string, variantId: string) => void;
   closeBuilder: () => void;
@@ -96,6 +98,12 @@ type UseBlocksReturn = {
   deleteCategory: (name: string) => void;
   moveBlockToCategory: (blockId: string, category: string) => void;
   removeBlockFromActive: (blockId: string) => void;
+  setBlockArrayItemEnabled: (
+    blockId: string,
+    valueId: string,
+    index: number,
+    enabled: boolean,
+  ) => void;
 };
 
 const useBlocks = ({
@@ -719,17 +727,6 @@ const useBlocks = ({
     ]);
   };
 
-  const parseArrayValue = (value: string): string[] => {
-    if (!value) return [];
-    try {
-      const parsed = JSON.parse(value) as unknown;
-      if (Array.isArray(parsed)) return parsed as string[];
-      return [];
-    } catch {
-      return [];
-    }
-  };
-
   const updateTemplateValueType = (id: string, valueType: TemplateValueType) => {
     updateEditableTemplateValues((prev) =>
       prev.map((item) =>
@@ -742,8 +739,11 @@ const useBlocks = ({
     updateEditableTemplateValues((prev) =>
       prev.map((item) => {
         if (item.id !== valueId) return item;
-        const arr = parseArrayValue(item.value);
-        return { ...item, value: JSON.stringify([...arr, ""]) };
+        const items = parseArrayItems(item.value);
+        return {
+          ...item,
+          value: JSON.stringify([...items, { v: "", e: true }]),
+        };
       }),
     );
   };
@@ -752,9 +752,11 @@ const useBlocks = ({
     updateEditableTemplateValues((prev) =>
       prev.map((item) => {
         if (item.id !== valueId) return item;
-        const arr = parseArrayValue(item.value);
-        const next = [...arr];
-        next[index] = text;
+        const items = parseArrayItems(item.value);
+        const next = [...items];
+        if (index >= 0 && index < next.length) {
+          next[index] = { ...next[index], v: text };
+        }
         return { ...item, value: JSON.stringify(next) };
       }),
     );
@@ -764,8 +766,26 @@ const useBlocks = ({
     updateEditableTemplateValues((prev) =>
       prev.map((item) => {
         if (item.id !== valueId) return item;
-        const arr = parseArrayValue(item.value);
-        const next = arr.filter((_, i) => i !== index);
+        const items = parseArrayItems(item.value);
+        const next = items.filter((_, i) => i !== index);
+        return { ...item, value: JSON.stringify(next) };
+      }),
+    );
+  };
+
+  const setArrayItemEnabled = (
+    valueId: string,
+    index: number,
+    enabled: boolean,
+  ) => {
+    updateEditableTemplateValues((prev) =>
+      prev.map((item) => {
+        if (item.id !== valueId) return item;
+        const items = parseArrayItems(item.value);
+        const next = [...items];
+        if (index >= 0 && index < next.length) {
+          next[index] = { ...next[index], e: enabled };
+        }
         return { ...item, value: JSON.stringify(next) };
       }),
     );
@@ -1102,6 +1122,90 @@ const useBlocks = ({
     });
   };
 
+  const setBlockArrayItemEnabled = useCallback(
+    (
+      blockId: string,
+      valueId: string,
+      index: number,
+      enabled: boolean,
+    ) => {
+      if (!selectedProfile) return;
+      const block =
+        libraryBlocks.find((b) => b.id === blockId) ??
+        activeBlocks.find((b) => b.id === blockId);
+      if (!block) return;
+      const values =
+        block.templateVariants.length > 0
+          ? (() => {
+              const variant =
+                block.templateVariants.find(
+                  (v) => v.id === block.activeVariantId,
+                ) ?? block.templateVariants[0];
+              return variant?.values ?? [];
+            })()
+          : block.templateValues;
+      const item = values.find((v) => v.id === valueId);
+      if (
+        !item ||
+        (item.valueType ?? "string") !== "array"
+      ) {
+        return;
+      }
+      const items = parseArrayItems(item.value);
+      if (index < 0 || index >= items.length) return;
+      const nextItems = [...items];
+      nextItems[index] = { ...nextItems[index], e: enabled };
+      const newValue = JSON.stringify(nextItems);
+      const updatedValues = values.map((v) =>
+        v.id === valueId ? { ...v, value: newValue } : v,
+      );
+      let updatedBlock: Block;
+      if (block.templateVariants.length > 0) {
+        const activeId =
+          block.activeVariantId ?? block.templateVariants[0]?.id;
+        updatedBlock = {
+          ...block,
+          templateVariants: block.templateVariants.map((v) =>
+            v.id === activeId
+              ? { ...v, values: updatedValues }
+              : v,
+          ),
+        };
+      } else {
+        updatedBlock = { ...block, templateValues: updatedValues };
+      }
+      const nextLibrary = libraryBlocks.map((b) =>
+        b.id === blockId ? updatedBlock : b,
+      );
+      const nextActive = activeBlocks.map((b) =>
+        b.id === blockId ? updatedBlock : b,
+      );
+      setLibraryBlocksByProfile((prev) => ({
+        ...prev,
+        [selectedProfile]: nextLibrary,
+      }));
+      setActiveBlocksByProfile((prev) => ({
+        ...prev,
+        [selectedProfile]: nextActive,
+      }));
+      updateBlocks(selectedProfile, {
+        libraryBlocks: nextLibrary,
+        activeBlocks: nextActive,
+        categories,
+      }).catch((error) => {
+        if (import.meta.env.DEV) {
+          console.error("[blocks] failed to persist array toggle", error);
+        }
+      });
+    },
+    [
+      selectedProfile,
+      libraryBlocks,
+      activeBlocks,
+      categories,
+    ],
+  );
+
   const removeBlockFromActive = useCallback(
     (blockId: string) => {
       moveBlock(blockId, "active", "library");
@@ -1165,6 +1269,7 @@ const useBlocks = ({
     addArrayItem,
     updateArrayItem,
     removeArrayItem,
+    setArrayItemEnabled,
     editBlock,
     setBlockActiveVariant,
     closeBuilder,
@@ -1185,6 +1290,7 @@ const useBlocks = ({
     deleteCategory,
     moveBlockToCategory,
     removeBlockFromActive,
+    setBlockArrayItemEnabled,
   };
 };
 

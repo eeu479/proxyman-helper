@@ -1339,6 +1339,38 @@ fn build_block_response(block_match: &BlockMatch) -> (Response, LoggedResponse) 
   (response, logged_response)
 }
 
+/// For array-type template values: substitute only enabled items as JSON array.
+fn substitution_string_for_value(value: &TemplateValue) -> String {
+  if value.value_type != "array" {
+    return value.value.clone();
+  }
+  let trimmed = value.value.trim();
+  if trimmed.is_empty() {
+    return "[]".to_string();
+  }
+  let parsed: Option<Value> = serde_json::from_str(trimmed).ok();
+  let Some(Value::Array(arr)) = parsed else {
+    return value.value.clone();
+  };
+  let mut enabled: Vec<String> = Vec::new();
+  for item in arr {
+    if let Some(obj) = item.as_object() {
+      let v = obj
+        .get("v")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+      let e = obj.get("e").and_then(Value::as_bool).unwrap_or(true);
+      if e {
+        enabled.push(v);
+      }
+    } else if let Some(s) = item.as_str() {
+      enabled.push(s.to_string());
+    }
+  }
+  serde_json::to_string(&enabled).unwrap_or_else(|_| value.value.clone())
+}
+
 fn render_template(template: &str, values: &[TemplateValue]) -> String {
   let mut output = template.to_string();
   for value in values {
@@ -1346,7 +1378,8 @@ fn render_template(template: &str, values: &[TemplateValue]) -> String {
       continue;
     }
     let needle = format!("{{{{{}}}}}", value.key);
-    output = output.replace(&needle, &value.value);
+    let replacement = substitution_string_for_value(value);
+    output = output.replace(&needle, &replacement);
   }
   output
 }

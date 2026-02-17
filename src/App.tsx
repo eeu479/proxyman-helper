@@ -139,6 +139,7 @@ const App = () => {
     addArrayItem,
     updateArrayItem,
     removeArrayItem,
+    setArrayItemEnabled,
     closeBuilder,
     handleCreateBlock,
     handleCreateAndReset,
@@ -159,6 +160,7 @@ const App = () => {
     renameCategory,
     deleteCategory,
     moveBlockToCategory,
+    setBlockArrayItemEnabled,
   } = useBlocks({ profiles, selectedProfile });
 
   useEffect(() => {
@@ -340,6 +342,7 @@ const App = () => {
               onEditBlock={editBlock}
               onExportBlock={handleExportBlock}
               onSelectVariant={setBlockActiveVariant}
+              onSetBlockArrayItemEnabled={setBlockArrayItemEnabled}
               onAddCategory={addCategory}
               onRenameCategory={renameCategory}
               onDeleteCategory={deleteCategory}
@@ -357,6 +360,7 @@ const App = () => {
               onRemoveFromActive={removeBlockFromActive}
               onClearActive={clearActiveBlocks}
               onSelectVariant={setBlockActiveVariant}
+              onSetBlockArrayItemEnabled={setBlockArrayItemEnabled}
             />
           </>
         )}
@@ -396,6 +400,7 @@ const App = () => {
         onAddArrayItem={addArrayItem}
         onUpdateArrayItem={updateArrayItem}
         onRemoveArrayItem={removeArrayItem}
+        onSetArrayItemEnabled={setArrayItemEnabled}
       />
 
       <CreateProfileModal
