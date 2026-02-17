@@ -1154,10 +1154,113 @@ body[data-theme="light"] .sidebar__select {
   padding-top: 12px;
 }
 
-.modal__variant-controls {
-  display: grid;
-  gap: 10px;
-  align-items: end;
+.modal__scenario-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.modal__scenario-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-ghost);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.modal__scenario-tab:hover {
+  border-color: var(--color-border-muted);
+  background: var(--color-border-soft);
+}
+
+.modal__scenario-tab.is-active {
+  background: var(--color-accent-soft);
+  border-color: var(--color-accent-border);
+  color: var(--color-text-accent);
+}
+
+.modal__scenario-tab-label {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modal__scenario-tab-input {
+  background: var(--color-surface-input);
+  border: 1px solid var(--color-accent-border);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  font-size: 12px;
+  padding: 2px 6px;
+  width: 100px;
+  outline: none;
+}
+
+.modal__scenario-tab-remove {
+  display: none;
+  border: none;
+  background: transparent;
+  color: var(--color-text-subtle);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+  line-height: 1;
+}
+
+.modal__scenario-tab:hover .modal__scenario-tab-remove {
+  display: inline;
+}
+
+.modal__scenario-tab-remove:hover {
+  color: var(--color-danger);
+}
+
+.modal__scenario-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px dashed var(--color-border-dashed);
+  background: transparent;
+  color: var(--color-text-subtle);
+  font-size: 14px;
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+
+.modal__scenario-add:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent-border);
+  background: var(--color-accent-soft);
+}
+
+.modal__scenario-empty {
+  border: 1px dashed var(--color-border-dashed);
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: transparent;
+  color: var(--color-text-subtle);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+
+.modal__scenario-empty:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent-border);
+  background: var(--color-accent-soft);
 }
 
 

@@ -3,6 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import type { TemplateValue, TemplateValueType } from "../../types/block";
 import Modal from "./Modal";
 
+/** Replace curly/smart quotes with straight ASCII quotes. */
+const normalizeStraightQuotes = (s: string): string =>
+  s.replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"')
+   .replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'");
+
 const parseArrayValue = (value: string): string[] => {
   if (!value) return [];
   try {
@@ -98,9 +103,8 @@ const BlockBuilderModal = ({
   onRemoveArrayItem,
 }: BlockBuilderModalProps) => {
   const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
-  const [isScenariosOpen, setIsScenariosOpen] = useState(false);
-  const [isVariantDialogOpen, setIsVariantDialogOpen] = useState(false);
-  const [variantNameInput, setVariantNameInput] = useState("");
+  const [editingVariantId, setEditingVariantId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
   const createAnotherRef = useRef(false);
 
   const activeVariant =
@@ -115,11 +119,28 @@ const BlockBuilderModal = ({
   useEffect(() => {
     if (isOpen) {
       setIsDescriptionOpen(false);
-      setIsScenariosOpen(false);
-      setIsVariantDialogOpen(false);
-      setVariantNameInput("");
+      setEditingVariantId(null);
+      setEditingName("");
     }
   }, [isOpen]);
+
+  const startEditing = (variantId: string, name: string) => {
+    setEditingVariantId(variantId);
+    setEditingName(name);
+  };
+
+  const commitRename = () => {
+    if (editingVariantId) {
+      onUpdateTemplateVariantName(editingVariantId, editingName);
+    }
+    setEditingVariantId(null);
+    setEditingName("");
+  };
+
+  const cancelRename = () => {
+    setEditingVariantId(null);
+    setEditingName("");
+  };
 
   // Derived values
   const pathParams = [...builderPath.matchAll(/\{([^}]+)\}/g)].map(
@@ -132,8 +153,14 @@ const BlockBuilderModal = ({
   } = (() => {
     const trimmed = builderResponseTemplate.trim();
     if (!trimmed) return { state: "empty" };
+    // Replace {{...}} template tokens with valid JSON placeholders so that
+    // templates with variables don't falsely report invalid JSON.
+    // Handle both quoted ("{{key}}") and unquoted ({{key}}) usages.
+    const sanitized = trimmed
+      .replace(/"\{\{[^}]+\}\}"/g, '"__placeholder__"')
+      .replace(/\{\{[^}]+\}\}/g, '"__placeholder__"');
     try {
-      JSON.parse(trimmed);
+      JSON.parse(sanitized);
       return { state: "valid" };
     } catch (e) {
       if (e instanceof SyntaxError) {
@@ -221,7 +248,6 @@ const BlockBuilderModal = ({
   };
 
   return (
-    <>
       <Modal
         title={isEditing ? "Edit Endpoint" : "Endpoint Builder"}
         isOpen={isOpen}
@@ -363,7 +389,9 @@ const BlockBuilderModal = ({
                   className="modal__input modal__textarea"
                   value={builderResponseTemplate}
                   onChange={(event) =>
-                    onChangeResponseTemplate(event.target.value)
+                    onChangeResponseTemplate(
+                      normalizeStraightQuotes(event.target.value),
+                    )
                   }
                   onBlur={formatJsonTemplate}
                   onKeyDown={handleTemplateKeyDown}
@@ -395,85 +423,84 @@ const BlockBuilderModal = ({
                 </span>
               </label>
 
-              {/* Response Scenarios (collapsible) */}
+              {/* Response Scenarios (pill tabs) */}
               <div className="modal__section">
                 <div className="modal__section-header">
-                  <button
-                    className="modal__desc-toggle"
-                    type="button"
-                    onClick={() => setIsScenariosOpen(!isScenariosOpen)}
-                  >
-                    {isScenariosOpen ? "▾" : "▸"} Response Scenarios{" "}
+                  <span>
+                    Response Scenarios{" "}
                     <span
                       title="Alternative value sets for testing different cases"
                       className="modal__tooltip-icon"
                     >
                       ⓘ
                     </span>
-                    {builderTemplateVariants.length > 0 &&
-                      ` (${builderTemplateVariants.length})`}
-                  </button>
-                  <button
-                    className="panel__action panel__action--ghost"
-                    type="button"
-                    onClick={() => setIsVariantDialogOpen(true)}
-                  >
-                    Add Response Scenario
-                  </button>
+                  </span>
                 </div>
-                {isScenariosOpen &&
-                  (builderTemplateVariants.length === 0 ? (
-                    <div className="modal__empty">
-                      Add scenarios to simulate different responses (errors,
-                      delays, variants)
-                    </div>
-                  ) : (
-                    <div className="modal__variant-controls">
-                      <label className="modal__label">
-                        Active Scenario
-                        <select
-                          className="modal__input"
-                          value={activeVariant?.id ?? ""}
-                          onChange={(event) =>
-                            onSelectTemplateVariant(event.target.value)
-                          }
-                        >
-                          {builderTemplateVariants.map((variant) => (
-                            <option key={variant.id} value={variant.id}>
-                              {variant.name || "Untitled Scenario"}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="modal__label">
-                        Scenario Name
-                        <input
-                          className="modal__input"
-                          type="text"
-                          value={activeVariant?.name ?? ""}
-                          onChange={(event) =>
-                            activeVariant &&
-                            onUpdateTemplateVariantName(
-                              activeVariant.id,
-                              event.target.value,
-                            )
-                          }
-                          placeholder="Scenario name"
-                        />
-                      </label>
+                {builderTemplateVariants.length === 0 ? (
+                  <button
+                    className="modal__scenario-empty"
+                    type="button"
+                    onClick={() => onAddTemplateVariant()}
+                  >
+                    Add scenario to test different responses
+                  </button>
+                ) : (
+                  <div className="modal__scenario-tabs">
+                    {builderTemplateVariants.map((variant) => (
                       <button
-                        className="modal__remove"
+                        key={variant.id}
+                        className={`modal__scenario-tab${variant.id === (activeVariant?.id ?? "") ? " is-active" : ""}`}
                         type="button"
-                        onClick={() =>
-                          activeVariant &&
-                          onRemoveTemplateVariant(activeVariant.id)
-                        }
-                        aria-label="Remove scenario"
+                        onClick={() => onSelectTemplateVariant(variant.id)}
                       >
-                        Remove Scenario
+                        {editingVariantId === variant.id ? (
+                          <input
+                            className="modal__scenario-tab-input"
+                            type="text"
+                            value={editingName}
+                            onChange={(e) => setEditingName(e.target.value)}
+                            onBlur={commitRename}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") commitRename();
+                              if (e.key === "Escape") cancelRename();
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            autoFocus
+                          />
+                        ) : (
+                          <span
+                            className="modal__scenario-tab-label"
+                            onDoubleClick={(e) => {
+                              e.stopPropagation();
+                              startEditing(variant.id, variant.name);
+                            }}
+                          >
+                            {variant.name || "Untitled"}
+                          </span>
+                        )}
+                        <span
+                          className="modal__scenario-tab-remove"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRemoveTemplateVariant(variant.id);
+                          }}
+                          role="button"
+                          aria-label="Remove scenario"
+                        >
+                          ✕
+                        </span>
                       </button>
-                    </div>
-                  ))}
+                    ))}
+                    <button
+                      className="modal__scenario-add"
+                      type="button"
+                      onClick={() => onAddTemplateVariant()}
+                      title="Add scenario"
+                    >
+                      +
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Template Values */}
@@ -740,55 +767,6 @@ const BlockBuilderModal = ({
           </div>
         </form>
       </Modal>
-
-      <Modal
-        title="Add Scenario"
-        isOpen={isVariantDialogOpen}
-        onClose={() => {
-          setIsVariantDialogOpen(false);
-          setVariantNameInput("");
-        }}
-        closeLabel="Close add scenario"
-        contentClassName="modal__content modal__content--small"
-      >
-        <form
-          className="modal__form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            onAddTemplateVariant(variantNameInput);
-            setIsVariantDialogOpen(false);
-            setVariantNameInput("");
-          }}
-        >
-          <label className="modal__label">
-            Scenario Name
-            <input
-              className="modal__input"
-              type="text"
-              value={variantNameInput}
-              onChange={(event) => setVariantNameInput(event.target.value)}
-              placeholder="e.g. Success Response"
-              autoFocus
-            />
-          </label>
-          <div className="modal__actions">
-            <button
-              className="panel__action panel__action--ghost"
-              type="button"
-              onClick={() => {
-                setIsVariantDialogOpen(false);
-                setVariantNameInput("");
-              }}
-            >
-              Cancel
-            </button>
-            <button className="panel__action" type="submit">
-              Add Scenario
-            </button>
-          </div>
-        </form>
-      </Modal>
-    </>
   );
 };
 
