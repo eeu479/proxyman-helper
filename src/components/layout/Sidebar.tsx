@@ -5,11 +5,11 @@ type SidebarProps = {
   selectedProfile: string;
   selectedSubprofile: string;
   activeProfileError?: string;
-  activeView: "builder" | "debug" | "settings";
+  activeView: "builder" | "debug" | "settings" | "library";
   theme: "dark" | "light";
   onSelectProfile: (profileId: string) => void;
   onSelectSubprofile: (subprofileId: string) => void;
-  onChangeView: (view: "builder" | "debug" | "settings") => void;
+  onChangeView: (view: "builder" | "debug" | "settings" | "library") => void;
   onCreateProfile: () => void;
   onToggleTheme: () => void;
 };
@@ -101,6 +101,13 @@ const Sidebar = ({
             onClick={() => onChangeView("builder")}
           >
             Builder
+          </button>
+          <button
+            className={`sidebar__nav-button ${activeView === "library" ? "is-active" : ""}`}
+            type="button"
+            onClick={() => onChangeView("library")}
+          >
+            Library
           </button>
           <button
             className={`sidebar__nav-button ${activeView === "debug" ? "is-active" : ""}`}

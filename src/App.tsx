@@ -4,6 +4,7 @@ import { updateBlocks } from "./api/blocks";
 import ActivePanel from "./components/blocks/ActivePanel";
 import LibraryPanel from "./components/blocks/LibraryPanel";
 import DebugPanel from "./components/debug/DebugPanel";
+import LibraryExplorerPanel from "./components/library/LibraryExplorerPanel";
 import Sidebar from "./components/layout/Sidebar";
 import BlockBuilderModal from "./components/modals/BlockBuilderModal";
 import CreateProfileModal from "./components/modals/CreateProfileModal";
@@ -17,7 +18,7 @@ import type { Block } from "./types/block";
 
 const App = () => {
   const [activeView, setActiveView] = useState<
-    "builder" | "debug" | "settings"
+    "builder" | "debug" | "settings" | "library"
   >("builder");
   const [selectedSubprofile, setSelectedSubprofile] = useState("");
   const [importBlocksMessage, setImportBlocksMessage] = useState<string | null>(
@@ -160,6 +161,7 @@ const App = () => {
     renameCategory,
     deleteCategory,
     moveBlockToCategory,
+    addLibraryBlockToActive,
     setBlockArrayItemEnabled,
   } = useBlocks({ profiles, selectedProfile });
 
@@ -282,6 +284,20 @@ const App = () => {
       >
         {activeView === "debug" ? (
           <DebugPanel onCreateBlockFromLog={openBuilderFromLog} />
+        ) : activeView === "library" ? (
+          <LibraryExplorerPanel
+            blocks={libraryBlocks}
+            categories={categories}
+            onCreateBlock={() => setIsBuilderOpen(true)}
+            onImportBlocks={handleImportBlocks}
+            importBlocksMessage={importBlocksMessage}
+            onEditBlock={editBlock}
+            onDeleteBlock={removeLibraryBlock}
+            onExportBlock={handleExportBlock}
+            onAddToActive={addLibraryBlockToActive}
+            onSelectVariant={setBlockActiveVariant}
+            onSetBlockArrayItemEnabled={setBlockArrayItemEnabled}
+          />
         ) : activeView === "settings" ? (
           <SettingsPanel
             profiles={profiles}

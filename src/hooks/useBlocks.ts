@@ -97,6 +97,7 @@ type UseBlocksReturn = {
   renameCategory: (oldName: string, newName: string) => void;
   deleteCategory: (name: string) => void;
   moveBlockToCategory: (blockId: string, category: string) => void;
+  addLibraryBlockToActive: (blockId: string) => void;
   removeBlockFromActive: (blockId: string) => void;
   setBlockArrayItemEnabled: (
     blockId: string,
@@ -105,6 +106,15 @@ type UseBlocksReturn = {
     enabled: boolean,
   ) => void;
 };
+
+function dedupeBlocksById(blocks: Block[]): Block[] {
+  const seen = new Set<string>();
+  return blocks.filter((b) => {
+    if (seen.has(b.id)) return false;
+    seen.add(b.id);
+    return true;
+  });
+}
 
 const useBlocks = ({
   profiles,
@@ -260,7 +270,7 @@ const useBlocks = ({
             ) {
               next[name] = createSeedLibrary();
             } else {
-              next[name] = blocks.libraryBlocks;
+              next[name] = dedupeBlocksById(blocks.libraryBlocks);
             }
           } else if (!next[name]) {
             next[name] = createSeedLibrary();
@@ -279,7 +289,7 @@ const useBlocks = ({
             ) {
               next[name] = [];
             } else {
-              next[name] = blocks.activeBlocks;
+              next[name] = dedupeBlocksById(blocks.activeBlocks);
             }
           } else if (!next[name]) {
             next[name] = [];
@@ -371,10 +381,14 @@ const useBlocks = ({
       const nextLibrary =
         destination === "active"
           ? libraryBlocks.filter((item) => item.id !== blockId)
-          : [...libraryBlocks, block];
+          : libraryBlocks.some((b) => b.id === blockId)
+            ? libraryBlocks
+            : [...libraryBlocks, block];
       const nextActive =
         destination === "active"
-          ? [...activeBlocks, block]
+          ? activeBlocks.some((b) => b.id === blockId)
+            ? activeBlocks
+            : [...activeBlocks, block]
           : activeBlocks.filter((item) => item.id !== blockId);
 
       if (destination === "active") {
@@ -580,11 +594,11 @@ const useBlocks = ({
     ) => {
       setLibraryBlocksByProfile((prev) => ({
         ...prev,
-        [profileName]: newLibraryBlocks,
+        [profileName]: dedupeBlocksById(newLibraryBlocks),
       }));
       setActiveBlocksByProfile((prev) => ({
         ...prev,
-        [profileName]: newActiveBlocks,
+        [profileName]: dedupeBlocksById(newActiveBlocks),
       }));
     },
     [],
@@ -1206,6 +1220,13 @@ const useBlocks = ({
     ],
   );
 
+  const addLibraryBlockToActive = useCallback(
+    (blockId: string) => {
+      moveBlock(blockId, "library", "active");
+    },
+    [moveBlock],
+  );
+
   const removeBlockFromActive = useCallback(
     (blockId: string) => {
       moveBlock(blockId, "active", "library");
@@ -1289,6 +1310,7 @@ const useBlocks = ({
     renameCategory,
     deleteCategory,
     moveBlockToCategory,
+    addLibraryBlockToActive,
     removeBlockFromActive,
     setBlockArrayItemEnabled,
   };
