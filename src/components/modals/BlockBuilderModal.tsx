@@ -95,11 +95,11 @@ const BlockBuilderModal = ({
   onUpdateArrayItem,
   onRemoveArrayItem,
 }: BlockBuilderModalProps) => {
-  const [activeTab, setActiveTab] = useState<"response" | "headers">(
-    "response",
-  );
+  const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
+  const [isScenariosOpen, setIsScenariosOpen] = useState(false);
   const [isVariantDialogOpen, setIsVariantDialogOpen] = useState(false);
   const [variantNameInput, setVariantNameInput] = useState("");
+
   const activeVariant =
     builderTemplateVariants.find(
       (variant) => variant.id === builderActiveVariantId,
@@ -111,17 +111,34 @@ const BlockBuilderModal = ({
 
   useEffect(() => {
     if (isOpen) {
-      setActiveTab("response");
+      setIsDescriptionOpen(false);
+      setIsScenariosOpen(false);
       setIsVariantDialogOpen(false);
       setVariantNameInput("");
     }
   }, [isOpen]);
 
+  // Derived values
+  const pathParams = [...builderPath.matchAll(/\{([^}]+)\}/g)].map(
+    (m) => m[1],
+  );
+
+  const jsonState: "valid" | "invalid" | "empty" = (() => {
+    const trimmed = builderResponseTemplate.trim();
+    if (!trimmed) return "empty";
+    try {
+      JSON.parse(trimmed);
+      return "valid";
+    } catch {
+      return "invalid";
+    }
+  })();
+
+  const previewLine = `${builderMethod} ${builderPath || "/..."}`;
+
   const formatJsonTemplate = () => {
     const trimmed = builderResponseTemplate.trim();
-    if (!trimmed) {
-      return;
-    }
+    if (!trimmed) return;
     try {
       const parsed = JSON.parse(trimmed);
       onChangeResponseTemplate(JSON.stringify(parsed, null, 2));
@@ -133,9 +150,7 @@ const BlockBuilderModal = ({
   const handleTemplateKeyDown: React.KeyboardEventHandler<
     HTMLTextAreaElement
   > = (event) => {
-    if (event.key !== "Tab") {
-      return;
-    }
+    if (event.key !== "Tab") return;
     event.preventDefault();
     const target = event.currentTarget;
     const start = target.selectionStart ?? 0;
@@ -145,11 +160,19 @@ const BlockBuilderModal = ({
       "\t" +
       builderResponseTemplate.slice(end);
     onChangeResponseTemplate(nextValue);
-
     requestAnimationFrame(() => {
       target.selectionStart = start + 1;
       target.selectionEnd = start + 1;
     });
+  };
+
+  const handleFormKeyDown: React.KeyboardEventHandler<HTMLFormElement> = (
+    event,
+  ) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault();
+      event.currentTarget.requestSubmit();
+    }
   };
 
   return (
@@ -159,84 +182,113 @@ const BlockBuilderModal = ({
         isOpen={isOpen}
         onClose={onClose}
         closeLabel="Close block builder"
+        contentClassName="modal__content modal__content--wide"
       >
-        <form className="modal__form" onSubmit={onSubmit}>
-          <label className="modal__label">
-            Name
-            <input
-              className="modal__input"
-              type="text"
-              value={builderName}
-              onChange={(event) => onChangeName(event.target.value)}
-              placeholder="Create Session"
-              required
-            />
-          </label>
-          <div className="modal__row">
-            <label className="modal__label">
-              Method
-              <select
-                className="modal__input"
-                value={builderMethod}
-                onChange={(event) => onChangeMethod(event.target.value)}
-              >
-                {["GET", "POST", "PUT", "PATCH", "DELETE"].map((method) => (
-                  <option key={method} value={method}>
-                    {method}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="modal__label">
-              Path
-              <input
-                className="modal__input"
-                type="text"
-                value={builderPath}
-                onChange={(event) => onChangePath(event.target.value)}
-                placeholder="/api/session"
-                required
-              />
-            </label>
-          </div>
-          <label className="modal__label">
-            Description
-            <textarea
-              className="modal__input modal__textarea"
-              value={builderDescription}
-              onChange={(event) => onChangeDescription(event.target.value)}
-              placeholder="Optional summary for this request"
-              rows={3}
-            />
-          </label>
-          <div
-            className="modal__tabs"
-            role="tablist"
-            aria-label="Block response"
-          >
-            <button
-              className={`modal__tab ${activeTab === "response" ? "is-active" : ""}`}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === "response"}
-              onClick={() => setActiveTab("response")}
-            >
-              Response
-            </button>
-            <button
-              className={`modal__tab ${activeTab === "headers" ? "is-active" : ""}`}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === "headers"}
-              onClick={() => setActiveTab("headers")}
-            >
-              Headers
-            </button>
-          </div>
-          {activeTab === "response" ? (
-            <>
+        <form
+          className="modal__form"
+          onSubmit={onSubmit}
+          onKeyDown={handleFormKeyDown}
+        >
+          <div className="modal__two-col">
+            {/* LEFT COLUMN — Request Identity */}
+            <div className="modal__col">
               <label className="modal__label">
-                Response Template
+                <span>
+                  Name <span className="modal__required">*</span>
+                </span>
+                <input
+                  className="modal__input"
+                  type="text"
+                  value={builderName}
+                  onChange={(event) => onChangeName(event.target.value)}
+                  placeholder="Create Session"
+                  required
+                />
+              </label>
+
+              <div className="modal__col" style={{ gap: "8px" }}>
+                <div className="modal__identity-strip">
+                  <label
+                    className="modal__label"
+                    style={{ flex: "0 0 110px" }}
+                  >
+                    Method
+                    <select
+                      className="modal__input"
+                      value={builderMethod}
+                      onChange={(event) => onChangeMethod(event.target.value)}
+                    >
+                      {["GET", "POST", "PUT", "PATCH", "DELETE"].map(
+                        (method) => (
+                          <option key={method} value={method}>
+                            {method}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </label>
+                  <label className="modal__label" style={{ flex: 1 }}>
+                    <span>
+                      Path <span className="modal__required">*</span>
+                    </span>
+                    <input
+                      className="modal__input"
+                      type="text"
+                      value={builderPath}
+                      onChange={(event) => onChangePath(event.target.value)}
+                      placeholder="/api/session"
+                      required
+                    />
+                  </label>
+                </div>
+                <div className="modal__preview-line">{previewLine}</div>
+                {pathParams.length > 0 && (
+                  <div className="modal__path-params">
+                    {pathParams.map((param) => (
+                      <span key={param} className="modal__path-chip">
+                        {`{${param}}`}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="modal__desc-section">
+                <button
+                  className="modal__desc-toggle"
+                  type="button"
+                  onClick={() => setIsDescriptionOpen(!isDescriptionOpen)}
+                >
+                  {isDescriptionOpen ? "▾ Description" : "▸ Description"}
+                </button>
+                {isDescriptionOpen && (
+                  <textarea
+                    className="modal__input modal__textarea"
+                    aria-label="Description"
+                    value={builderDescription}
+                    onChange={(event) =>
+                      onChangeDescription(event.target.value)
+                    }
+                    placeholder="Optional summary for this request"
+                    rows={3}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* RIGHT COLUMN — Response */}
+            <div className="modal__col">
+              <label className="modal__label">
+                <div className="modal__label-row">
+                  <span>Response Template</span>
+                  <button
+                    className="modal__format-btn"
+                    type="button"
+                    onClick={formatJsonTemplate}
+                  >
+                    {"{ }"}
+                  </button>
+                </div>
                 <textarea
                   className="modal__input modal__textarea"
                   value={builderResponseTemplate}
@@ -246,70 +298,93 @@ const BlockBuilderModal = ({
                   onBlur={formatJsonTemplate}
                   onKeyDown={handleTemplateKeyDown}
                   placeholder='e.g. { "status": "ok", "userId": "{{userId}}" }'
-                  rows={4}
+                  rows={6}
                 />
+                {jsonState !== "empty" && (
+                  <span
+                    className={`modal__json-state modal__json-state--${jsonState}`}
+                  >
+                    {jsonState === "valid" ? "✓ Valid JSON" : "✗ Invalid JSON"}
+                  </span>
+                )}
+                <span className="modal__hint">
+                  {"Use {{key}} for variable substitution"}
+                </span>
               </label>
+
+              {/* Response Scenarios (collapsible) */}
               <div className="modal__section">
                 <div className="modal__section-header">
-                  <span>Template Variants</span>
+                  <button
+                    className="modal__desc-toggle"
+                    type="button"
+                    onClick={() => setIsScenariosOpen(!isScenariosOpen)}
+                  >
+                    {isScenariosOpen ? "▾" : "▸"} Response Scenarios
+                    {builderTemplateVariants.length > 0 &&
+                      ` (${builderTemplateVariants.length})`}
+                  </button>
                   <button
                     className="panel__action panel__action--ghost"
                     type="button"
                     onClick={() => setIsVariantDialogOpen(true)}
                   >
-                    Add Variant
+                    Add Scenario
                   </button>
                 </div>
-                {builderTemplateVariants.length === 0 ? (
-                  <div className="modal__empty">No variants yet.</div>
-                ) : (
-                  <div className="modal__variant-controls">
-                    <label className="modal__label">
-                      Active Variant
-                      <select
-                        className="modal__input"
-                        value={activeVariant?.id ?? ""}
-                        onChange={(event) =>
-                          onSelectTemplateVariant(event.target.value)
-                        }
-                      >
-                        {builderTemplateVariants.map((variant) => (
-                          <option key={variant.id} value={variant.id}>
-                            {variant.name || "Untitled Variant"}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="modal__label">
-                      Variant Name
-                      <input
-                        className="modal__input"
-                        type="text"
-                        value={activeVariant?.name ?? ""}
-                        onChange={(event) =>
+                {isScenariosOpen &&
+                  (builderTemplateVariants.length === 0 ? (
+                    <div className="modal__empty">No scenarios yet.</div>
+                  ) : (
+                    <div className="modal__variant-controls">
+                      <label className="modal__label">
+                        Active Scenario
+                        <select
+                          className="modal__input"
+                          value={activeVariant?.id ?? ""}
+                          onChange={(event) =>
+                            onSelectTemplateVariant(event.target.value)
+                          }
+                        >
+                          {builderTemplateVariants.map((variant) => (
+                            <option key={variant.id} value={variant.id}>
+                              {variant.name || "Untitled Scenario"}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="modal__label">
+                        Scenario Name
+                        <input
+                          className="modal__input"
+                          type="text"
+                          value={activeVariant?.name ?? ""}
+                          onChange={(event) =>
+                            activeVariant &&
+                            onUpdateTemplateVariantName(
+                              activeVariant.id,
+                              event.target.value,
+                            )
+                          }
+                          placeholder="Scenario name"
+                        />
+                      </label>
+                      <button
+                        className="modal__remove"
+                        type="button"
+                        onClick={() =>
                           activeVariant &&
-                          onUpdateTemplateVariantName(
-                            activeVariant.id,
-                            event.target.value,
-                          )
+                          onRemoveTemplateVariant(activeVariant.id)
                         }
-                        placeholder="Variant name"
-                      />
-                    </label>
-                    <button
-                      className="modal__remove"
-                      type="button"
-                      onClick={() =>
-                        activeVariant &&
-                        onRemoveTemplateVariant(activeVariant.id)
-                      }
-                      aria-label="Remove template variant"
-                    >
-                      Remove Variant
-                    </button>
-                  </div>
-                )}
+                        aria-label="Remove scenario"
+                      >
+                        Remove Scenario
+                      </button>
+                    </div>
+                  ))}
               </div>
+
+              {/* Template Values */}
               <div className="modal__section">
                 <div className="modal__section-header">
                   <span>Template Values</span>
@@ -330,7 +405,7 @@ const BlockBuilderModal = ({
                       const arrayItems = parseArrayValue(item.value);
                       return (
                         <div key={item.id} className="modal__template-entry">
-                          <div className="modal__template-row">
+                          <div className="modal__template-row modal__template-row--4col">
                             <input
                               className="modal__input"
                               type="text"
@@ -365,12 +440,23 @@ const BlockBuilderModal = ({
                               </button>
                             </div>
                             <button
+                              className="modal__icon-btn"
+                              type="button"
+                              onClick={() =>
+                                onAddTemplateValue(item.key, item.value)
+                              }
+                              aria-label="Duplicate template value"
+                              title="Duplicate"
+                            >
+                              ⊕
+                            </button>
+                            <button
                               className="modal__remove"
                               type="button"
                               onClick={() => onRemoveTemplateValue(item.id)}
                               aria-label="Remove template value"
                             >
-                              Remove
+                              ✕
                             </button>
                           </div>
                           {type === "string" ? (
@@ -434,65 +520,72 @@ const BlockBuilderModal = ({
                   </div>
                 )}
               </div>
-            </>
-          ) : (
-            <div className="modal__section">
-              <div className="modal__section-header">
-                <span>Response Headers</span>
-                <button
-                  className="panel__action panel__action--ghost"
-                  type="button"
-                  onClick={() => onAddResponseHeader()}
-                >
-                  Add Header
-                </button>
-              </div>
-              {builderResponseHeaders.length === 0 ? (
-                <div className="modal__empty">No headers yet.</div>
-              ) : (
-                <div className="modal__template-list">
-                  {builderResponseHeaders.map((item) => (
-                    <div key={item.id} className="modal__template-row">
-                      <input
-                        className="modal__input"
-                        type="text"
-                        placeholder="Header name"
-                        value={item.key}
-                        onChange={(event) =>
-                          onUpdateResponseHeader(
-                            item.id,
-                            "key",
-                            event.target.value,
-                          )
-                        }
-                      />
-                      <input
-                        className="modal__input"
-                        type="text"
-                        placeholder="Header value"
-                        value={item.value}
-                        onChange={(event) =>
-                          onUpdateResponseHeader(
-                            item.id,
-                            "value",
-                            event.target.value,
-                          )
-                        }
-                      />
-                      <button
-                        className="modal__remove"
-                        type="button"
-                        onClick={() => onRemoveResponseHeader(item.id)}
-                        aria-label="Remove response header"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
+
+              {/* Response Headers */}
+              <div className="modal__section">
+                <div className="modal__section-header">
+                  <span>Response Headers</span>
+                  <button
+                    className="panel__action panel__action--ghost"
+                    type="button"
+                    onClick={() => onAddResponseHeader()}
+                  >
+                    Add Header
+                  </button>
                 </div>
-              )}
+                {builderResponseHeaders.length === 0 ? (
+                  <div className="modal__empty">No headers yet.</div>
+                ) : (
+                  <div className="modal__template-list">
+                    {builderResponseHeaders.map((item) => (
+                      <div key={item.id} className="modal__template-row">
+                        <input
+                          className="modal__input"
+                          type="text"
+                          placeholder="Header name"
+                          value={item.key}
+                          onChange={(event) =>
+                            onUpdateResponseHeader(
+                              item.id,
+                              "key",
+                              event.target.value,
+                            )
+                          }
+                        />
+                        <input
+                          className="modal__input"
+                          type="text"
+                          placeholder="Header value"
+                          value={item.value}
+                          onChange={(event) =>
+                            onUpdateResponseHeader(
+                              item.id,
+                              "value",
+                              event.target.value,
+                            )
+                          }
+                        />
+                        <button
+                          className="modal__remove"
+                          type="button"
+                          onClick={() => onRemoveResponseHeader(item.id)}
+                          aria-label="Remove response header"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          )}
+          </div>
+
+          {/* Full-width footer */}
+          <div className="modal__summary">
+            {isEditing ? "Editing endpoint:" : "Creates endpoint:"}{" "}
+            {previewLine}
+          </div>
           <div className="modal__actions">
             <button
               className="panel__action panel__action--ghost"
@@ -507,14 +600,15 @@ const BlockBuilderModal = ({
           </div>
         </form>
       </Modal>
+
       <Modal
-        title="Add Variant"
+        title="Add Scenario"
         isOpen={isVariantDialogOpen}
         onClose={() => {
           setIsVariantDialogOpen(false);
           setVariantNameInput("");
         }}
-        closeLabel="Close add variant"
+        closeLabel="Close add scenario"
         contentClassName="modal__content modal__content--small"
       >
         <form
@@ -527,7 +621,7 @@ const BlockBuilderModal = ({
           }}
         >
           <label className="modal__label">
-            Variant Name
+            Scenario Name
             <input
               className="modal__input"
               type="text"
@@ -549,7 +643,7 @@ const BlockBuilderModal = ({
               Cancel
             </button>
             <button className="panel__action" type="submit">
-              Add Variant
+              Add Scenario
             </button>
           </div>
         </form>
