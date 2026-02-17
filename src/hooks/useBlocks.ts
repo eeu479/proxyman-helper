@@ -68,6 +68,7 @@ type UseBlocksReturn = {
   setBlockActiveVariant: (blockId: string, variantId: string) => void;
   closeBuilder: () => void;
   handleCreateBlock: (event: FormEvent<HTMLFormElement>) => void;
+  handleCreateAndReset: (event: FormEvent<HTMLFormElement>) => void;
   allowDrop: (event: DragEvent<HTMLDivElement>) => void;
   handleDragEnter: (event: DragEvent<HTMLDivElement>) => void;
   handleDragStart: (
@@ -600,24 +601,17 @@ const useBlocks = ({
     resetBuilder();
   };
 
-  const handleCreateBlock = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!selectedProfile) {
-      return;
-    }
+  const saveBlock = (onComplete: () => void) => {
+    if (!selectedProfile) return;
     const trimmedName = builderName.trim();
     const trimmedPath = builderPath.trim();
-    if (!trimmedName || !trimmedPath) {
-      return;
-    }
+    if (!trimmedName || !trimmedPath) return;
 
     const responseHeaders = builderResponseHeaders.reduce<
       Record<string, string>
     >((acc, item) => {
       const key = item.key.trim();
-      if (!key) {
-        return acc;
-      }
+      if (!key) return acc;
       acc[key] = item.value.trim();
       return acc;
     }, {});
@@ -676,7 +670,17 @@ const useBlocks = ({
         console.error("[blocks] failed to persist block", error);
       }
     });
-    closeBuilder();
+    onComplete();
+  };
+
+  const handleCreateBlock = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    saveBlock(closeBuilder);
+  };
+
+  const handleCreateAndReset = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    saveBlock(resetBuilder);
   };
 
   const updateEditableTemplateValues = (
@@ -1165,6 +1169,7 @@ const useBlocks = ({
     setBlockActiveVariant,
     closeBuilder,
     handleCreateBlock,
+    handleCreateAndReset,
     allowDrop,
     handleDragEnter,
     handleDragStart,

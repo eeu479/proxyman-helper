@@ -1,5 +1,5 @@
 import type { FormEvent } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { TemplateValue, TemplateValueType } from "../../types/block";
 import Modal from "./Modal";
 
@@ -32,6 +32,7 @@ type BlockBuilderModalProps = {
   builderActiveVariantId: string | null;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onSaveAndCreateAnother?: (event: FormEvent<HTMLFormElement>) => void;
   onChangeName: (value: string) => void;
   onChangeMethod: (value: string) => void;
   onChangePath: (value: string) => void;
@@ -75,6 +76,7 @@ const BlockBuilderModal = ({
   builderActiveVariantId,
   onClose,
   onSubmit,
+  onSaveAndCreateAnother,
   onChangeName,
   onChangeMethod,
   onChangePath,
@@ -99,6 +101,7 @@ const BlockBuilderModal = ({
   const [isScenariosOpen, setIsScenariosOpen] = useState(false);
   const [isVariantDialogOpen, setIsVariantDialogOpen] = useState(false);
   const [variantNameInput, setVariantNameInput] = useState("");
+  const createAnotherRef = useRef(false);
 
   const activeVariant =
     builderTemplateVariants.find(
@@ -123,18 +126,50 @@ const BlockBuilderModal = ({
     (m) => m[1],
   );
 
-  const jsonState: "valid" | "invalid" | "empty" = (() => {
+  const jsonValidation: {
+    state: "valid" | "invalid" | "empty";
+    errorLine?: number;
+  } = (() => {
     const trimmed = builderResponseTemplate.trim();
-    if (!trimmed) return "empty";
+    if (!trimmed) return { state: "empty" };
     try {
       JSON.parse(trimmed);
-      return "valid";
-    } catch {
-      return "invalid";
+      return { state: "valid" };
+    } catch (e) {
+      if (e instanceof SyntaxError) {
+        const msg = e.message;
+        const lineMatch = /line (\d+)/i.exec(msg);
+        if (lineMatch) {
+          return { state: "invalid", errorLine: parseInt(lineMatch[1]) };
+        }
+        const posMatch = /position (\d+)/i.exec(msg);
+        if (posMatch) {
+          const pos = parseInt(posMatch[1]);
+          const errorLine =
+            (trimmed.slice(0, pos).match(/\n/g) ?? []).length + 1;
+          return { state: "invalid", errorLine };
+        }
+      }
+      return { state: "invalid" };
     }
   })();
+  const jsonState = jsonValidation.state;
 
   const previewLine = `${builderMethod} ${builderPath || "/..."}`;
+
+  const undefinedTokens = (() => {
+    const tokens = [
+      ...builderResponseTemplate.matchAll(/\{\{([^}]+)\}\}/g),
+    ]
+      .map((m) => m[1]?.trim())
+      .filter((t): t is string => Boolean(t));
+    const definedKeys = new Set(visibleTemplateValues.map((v) => v.key));
+    return [...new Set(tokens)].filter((t) => !definedKeys.has(t));
+  })();
+
+  const copyTemplate = () => {
+    void navigator.clipboard.writeText(builderResponseTemplate);
+  };
 
   const formatJsonTemplate = () => {
     const trimmed = builderResponseTemplate.trim();
@@ -166,6 +201,16 @@ const BlockBuilderModal = ({
     });
   };
 
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    if (createAnotherRef.current && onSaveAndCreateAnother) {
+      createAnotherRef.current = false;
+      onSaveAndCreateAnother(event);
+    } else {
+      createAnotherRef.current = false;
+      onSubmit(event);
+    }
+  };
+
   const handleFormKeyDown: React.KeyboardEventHandler<HTMLFormElement> = (
     event,
   ) => {
@@ -178,15 +223,15 @@ const BlockBuilderModal = ({
   return (
     <>
       <Modal
-        title={isEditing ? "Edit Block" : "Block Builder"}
+        title={isEditing ? "Edit Endpoint" : "Endpoint Builder"}
         isOpen={isOpen}
         onClose={onClose}
-        closeLabel="Close block builder"
+        closeLabel="Close endpoint builder"
         contentClassName="modal__content modal__content--wide"
       >
         <form
           className="modal__form"
-          onSubmit={onSubmit}
+          onSubmit={handleSubmit}
           onKeyDown={handleFormKeyDown}
         >
           <div className="modal__two-col">
@@ -241,7 +286,13 @@ const BlockBuilderModal = ({
                     />
                   </label>
                 </div>
-                <div className="modal__preview-line">{previewLine}</div>
+                <div className="modal__preview-line">
+                  <span className="modal__preview-icon">🌐</span>
+                  <span>
+                    {isEditing ? "Edits endpoint:" : "Creates endpoint:"}{" "}
+                    {previewLine}
+                  </span>
+                </div>
                 {pathParams.length > 0 && (
                   <div className="modal__path-params">
                     {pathParams.map((param) => (
@@ -269,7 +320,7 @@ const BlockBuilderModal = ({
                     onChange={(event) =>
                       onChangeDescription(event.target.value)
                     }
-                    placeholder="Optional summary for this request"
+                    placeholder="Optional notes about this endpoint"
                     rows={3}
                   />
                 )}
@@ -280,14 +331,33 @@ const BlockBuilderModal = ({
             <div className="modal__col">
               <label className="modal__label">
                 <div className="modal__label-row">
-                  <span>Response Template</span>
-                  <button
-                    className="modal__format-btn"
-                    type="button"
-                    onClick={formatJsonTemplate}
-                  >
-                    {"{ }"}
-                  </button>
+                  <span>
+                    Response Template{" "}
+                    <span
+                      title="The JSON body returned by this endpoint"
+                      className="modal__tooltip-icon"
+                    >
+                      ⓘ
+                    </span>
+                  </span>
+                  <div className="modal__toolbar">
+                    <button
+                      className="modal__format-btn"
+                      type="button"
+                      onClick={copyTemplate}
+                      title="Copy template to clipboard"
+                    >
+                      ⧉
+                    </button>
+                    <button
+                      className="modal__format-btn"
+                      type="button"
+                      onClick={formatJsonTemplate}
+                      title="Format JSON"
+                    >
+                      {"{ }"}
+                    </button>
+                  </div>
                 </div>
                 <textarea
                   className="modal__input modal__textarea"
@@ -304,8 +374,21 @@ const BlockBuilderModal = ({
                   <span
                     className={`modal__json-state modal__json-state--${jsonState}`}
                   >
-                    {jsonState === "valid" ? "✓ Valid JSON" : "✗ Invalid JSON"}
+                    {jsonState === "valid"
+                      ? "✓ Valid JSON"
+                      : jsonValidation.errorLine !== undefined
+                        ? `✗ Invalid JSON — line ${jsonValidation.errorLine}`
+                        : "✗ Invalid JSON"}
                   </span>
+                )}
+                {undefinedTokens.length > 0 && (
+                  <div className="modal__token-warnings">
+                    {undefinedTokens.map((token) => (
+                      <span key={token} className="modal__token-warning">
+                        {`⚠ Undefined variable: {{${token}}}`}
+                      </span>
+                    ))}
+                  </div>
                 )}
                 <span className="modal__hint">
                   {"Use {{key}} for variable substitution"}
@@ -320,7 +403,13 @@ const BlockBuilderModal = ({
                     type="button"
                     onClick={() => setIsScenariosOpen(!isScenariosOpen)}
                   >
-                    {isScenariosOpen ? "▾" : "▸"} Response Scenarios
+                    {isScenariosOpen ? "▾" : "▸"} Response Scenarios{" "}
+                    <span
+                      title="Alternative value sets for testing different cases"
+                      className="modal__tooltip-icon"
+                    >
+                      ⓘ
+                    </span>
                     {builderTemplateVariants.length > 0 &&
                       ` (${builderTemplateVariants.length})`}
                   </button>
@@ -329,12 +418,15 @@ const BlockBuilderModal = ({
                     type="button"
                     onClick={() => setIsVariantDialogOpen(true)}
                   >
-                    Add Scenario
+                    Add Response Scenario
                   </button>
                 </div>
                 {isScenariosOpen &&
                   (builderTemplateVariants.length === 0 ? (
-                    <div className="modal__empty">No scenarios yet.</div>
+                    <div className="modal__empty">
+                      Add scenarios to simulate different responses (errors,
+                      delays, variants)
+                    </div>
                   ) : (
                     <div className="modal__variant-controls">
                       <label className="modal__label">
@@ -387,7 +479,15 @@ const BlockBuilderModal = ({
               {/* Template Values */}
               <div className="modal__section">
                 <div className="modal__section-header">
-                  <span>Template Values</span>
+                  <span>
+                    Template Values{" "}
+                    <span
+                      title="Variables replaced in the response using {{key}} syntax"
+                      className="modal__tooltip-icon"
+                    >
+                      ⓘ
+                    </span>
+                  </span>
                   <button
                     className="panel__action panel__action--ghost"
                     type="button"
@@ -397,7 +497,9 @@ const BlockBuilderModal = ({
                   </button>
                 </div>
                 {visibleTemplateValues.length === 0 ? (
-                  <div className="modal__empty">No template values yet.</div>
+                  <div className="modal__empty">
+                    Define variables used in your response template
+                  </div>
                 ) : (
                   <div className="modal__template-list">
                     {visibleTemplateValues.map((item) => {
@@ -525,16 +627,43 @@ const BlockBuilderModal = ({
               <div className="modal__section">
                 <div className="modal__section-header">
                   <span>Response Headers</span>
-                  <button
-                    className="panel__action panel__action--ghost"
-                    type="button"
-                    onClick={() => onAddResponseHeader()}
-                  >
-                    Add Header
-                  </button>
+                  <div className="modal__header-actions">
+                    <button
+                      className="modal__format-btn"
+                      type="button"
+                      onClick={() =>
+                        onAddResponseHeader(
+                          "Content-Type",
+                          "application/json",
+                        )
+                      }
+                      title="Add Content-Type: application/json"
+                    >
+                      JSON
+                    </button>
+                    <button
+                      className="modal__format-btn"
+                      type="button"
+                      onClick={() =>
+                        onAddResponseHeader("Access-Control-Allow-Origin", "*")
+                      }
+                      title="Add Access-Control-Allow-Origin: *"
+                    >
+                      CORS
+                    </button>
+                    <button
+                      className="panel__action panel__action--ghost"
+                      type="button"
+                      onClick={() => onAddResponseHeader()}
+                    >
+                      Add Header
+                    </button>
+                  </div>
                 </div>
                 {builderResponseHeaders.length === 0 ? (
-                  <div className="modal__empty">No headers yet.</div>
+                  <div className="modal__empty">
+                    Add headers returned with this response (e.g. Content-Type)
+                  </div>
                 ) : (
                   <div className="modal__template-list">
                     {builderResponseHeaders.map((item) => (
@@ -594,8 +723,19 @@ const BlockBuilderModal = ({
             >
               Cancel
             </button>
+            {!isEditing && onSaveAndCreateAnother && (
+              <button
+                className="panel__action panel__action--ghost"
+                type="submit"
+                onClick={() => {
+                  createAnotherRef.current = true;
+                }}
+              >
+                Save & Create Another
+              </button>
+            )}
             <button className="panel__action" type="submit">
-              {isEditing ? "Update Block" : "Save Block"}
+              {isEditing ? "Update Endpoint" : "Save Endpoint"}
             </button>
           </div>
         </form>

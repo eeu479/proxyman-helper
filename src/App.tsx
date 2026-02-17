@@ -141,6 +141,7 @@ const App = () => {
     removeArrayItem,
     closeBuilder,
     handleCreateBlock,
+    handleCreateAndReset,
     allowDrop,
     handleDragEnter,
     handleDragStart,
@@ -375,6 +376,7 @@ const App = () => {
         builderActiveVariantId={builderActiveVariantId}
         onClose={closeBuilder}
         onSubmit={handleCreateBlock}
+        onSaveAndCreateAnother={handleCreateAndReset}
         onChangeName={setBuilderName}
         onChangeMethod={setBuilderMethod}
         onChangePath={setBuilderPath}
