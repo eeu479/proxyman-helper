@@ -1,3 +1,4 @@
+import type { Library } from "../../api/libraries";
 import type { ChangeEvent, DragEvent as ReactDragEvent, DragEventHandler, PointerEventHandler } from "react";
 import { useMemo, useRef, useState } from "react";
 import type { Block } from "../../types/block";
@@ -59,6 +60,7 @@ function groupBlocksByCategory(
 type LibraryPanelProps = {
   blocks: Block[];
   categories: string[];
+  libraries?: Library[];
   onCreateBlock: () => void;
   onImportBlocks?: (file: File) => Promise<void>;
   importBlocksMessage?: string | null;
@@ -87,6 +89,7 @@ type LibraryPanelProps = {
 const LibraryPanel = ({
   blocks,
   categories,
+  libraries = [],
   onCreateBlock,
   onImportBlocks,
   importBlocksMessage,
@@ -319,6 +322,11 @@ const LibraryPanel = ({
                         block={block}
                         compact
                         draggable
+                        libraryName={
+                          libraries.find(
+                            (l) => l.id === (block.sourceLibraryId ?? "local"),
+                          )?.name ?? block.sourceLibraryId ?? "Local"
+                        }
                         onDragStart={onDragStart(block.id)}
                         onDragEnd={onDragEnd}
                         onPointerDown={onPointerDown(block.id)}

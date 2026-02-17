@@ -1,5 +1,11 @@
+import {
+  type Library,
+  type LibraryStatus,
+  type PushLibraryOptions,
+  fetchLibraryStatus,
+} from "../../api/libraries";
 import type { ChangeEvent } from "react";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Block } from "../../types/block";
 import BlockCard from "../blocks/BlockCard";
 
@@ -56,8 +62,10 @@ function groupBlocksByCategory(
 }
 
 type LibraryExplorerPanelProps = {
+  profileName: string | null;
   blocks: Block[];
   categories: string[];
+  libraries: Library[];
   onCreateBlock: () => void;
   onImportBlocks?: (file: File) => Promise<void>;
   importBlocksMessage?: string | null;
@@ -72,11 +80,18 @@ type LibraryExplorerPanelProps = {
     index: number,
     enabled: boolean,
   ) => void;
+  onPullLibrary?: (libId: string) => Promise<void>;
+  onPushLibrary?: (
+    libId: string,
+    options?: PushLibraryOptions,
+  ) => Promise<void>;
 };
 
 const LibraryExplorerPanel = ({
+  profileName,
   blocks,
   categories,
+  libraries,
   onCreateBlock,
   onImportBlocks,
   importBlocksMessage,
@@ -86,15 +101,83 @@ const LibraryExplorerPanel = ({
   onAddToActive,
   onSelectVariant,
   onSetBlockArrayItemEnabled,
+  onPullLibrary,
+  onPushLibrary,
 }: LibraryExplorerPanelProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [methodFilter, setMethodFilter] = useState<string>("");
   const [categoryFilter, setCategoryFilter] = useState<string>("");
+  const [selectedLibraryId, setSelectedLibraryId] = useState<string>("");
+  const [libraryActionPending, setLibraryActionPending] = useState<
+    "pull" | "push" | null
+  >(null);
+  const [libraryActionError, setLibraryActionError] = useState<string | null>(
+    null,
+  );
+  const [libraryStatus, setLibraryStatus] = useState<LibraryStatus | null>(null);
+  const [libraryStatusError, setLibraryStatusError] = useState<string | null>(
+    null,
+  );
+  const [showPullFirstWarning, setShowPullFirstWarning] = useState(false);
+  const [pushCommitMessage, setPushCommitMessage] = useState("");
+
+  const selectedLibrary = useMemo(
+    () =>
+      selectedLibraryId
+        ? libraries.find((l) => l.id === selectedLibraryId) ?? null
+        : null,
+    [libraries, selectedLibraryId],
+  );
+  const isRemoteSelected = selectedLibrary?.type === "remote";
+
+  const refetchLibraryStatus = useCallback(() => {
+    if (!profileName || !selectedLibraryId) return;
+    setLibraryStatusError(null);
+    fetchLibraryStatus(profileName, selectedLibraryId)
+      .then(setLibraryStatus)
+      .catch((e) => {
+        setLibraryStatus(null);
+        setLibraryStatusError(
+          e instanceof Error ? e.message : "Failed to load status",
+        );
+      });
+  }, [profileName, selectedLibraryId]);
+
+  useEffect(() => {
+    if (!profileName || !selectedLibraryId || !isRemoteSelected) {
+      setLibraryStatus(null);
+      setLibraryStatusError(null);
+      return;
+    }
+    let cancelled = false;
+    setLibraryStatusError(null);
+    fetchLibraryStatus(profileName, selectedLibraryId)
+      .then((status) => {
+        if (!cancelled) setLibraryStatus(status);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setLibraryStatus(null);
+          setLibraryStatusError(
+            e instanceof Error ? e.message : "Failed to load status",
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profileName, selectedLibraryId, isRemoteSelected]);
 
   const filteredBlocks = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     let result = blocks;
+
+    if (selectedLibraryId) {
+      result = result.filter(
+        (block) => (block.sourceLibraryId ?? "local") === selectedLibraryId,
+      );
+    }
 
     if (q) {
       result = result.filter((block) => {
@@ -128,7 +211,7 @@ const LibraryExplorerPanel = ({
     }
 
     return result;
-  }, [blocks, searchQuery, methodFilter, categoryFilter]);
+  }, [blocks, selectedLibraryId, searchQuery, methodFilter, categoryFilter]);
 
   const grouped = useMemo(
     () => groupBlocksByCategory(filteredBlocks, categories),
@@ -160,6 +243,55 @@ const LibraryExplorerPanel = ({
 
   const isEmpty = blocks.length === 0;
   const hasNoResults = !isEmpty && filteredBlocks.length === 0;
+  const isSingleLibraryEmpty =
+    selectedLibraryId && !hasNoResults && filteredBlocks.length === 0;
+
+  const handleLibraryChange = (value: string) => {
+    setSelectedLibraryId(value);
+    setLibraryActionError(null);
+  };
+
+  const handlePull = async () => {
+    if (!selectedLibraryId || !onPullLibrary) return;
+    setShowPullFirstWarning(false);
+    setLibraryActionPending("pull");
+    setLibraryActionError(null);
+    try {
+      await onPullLibrary(selectedLibraryId);
+      refetchLibraryStatus();
+    } catch (e) {
+      setLibraryActionError(
+        e instanceof Error ? e.message : "Pull failed",
+      );
+    } finally {
+      setLibraryActionPending(null);
+    }
+  };
+
+  const handlePush = async () => {
+    if (!selectedLibraryId || !onPushLibrary) return;
+    if (libraryStatus && libraryStatus.behindCount > 0) {
+      setShowPullFirstWarning(true);
+      return;
+    }
+    setShowPullFirstWarning(false);
+    setLibraryActionPending("push");
+    setLibraryActionError(null);
+    try {
+      await onPushLibrary(selectedLibraryId, {
+        commitMessage:
+          pushCommitMessage.trim() !== "" ? pushCommitMessage.trim() : undefined,
+      });
+      setPushCommitMessage("");
+      refetchLibraryStatus();
+    } catch (e) {
+      setLibraryActionError(
+        e instanceof Error ? e.message : "Push failed",
+      );
+    } finally {
+      setLibraryActionPending(null);
+    }
+  };
 
   return (
     <div className="library-explorer">
@@ -200,42 +332,139 @@ const LibraryExplorerPanel = ({
       ) : null}
 
       {!isEmpty ? (
-        <div className="library-explorer__filters">
-          <input
-            type="search"
-            className="library-explorer__search"
-            placeholder="Search by name, method, path, description…"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            aria-label="Search blocks"
-          />
-          <select
-            className="library-explorer__select"
-            value={methodFilter}
-            onChange={(e) => setMethodFilter(e.target.value)}
-            aria-label="Filter by method"
-          >
-            <option value="">All methods</option>
-            {methods.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-          <select
-            className="library-explorer__select"
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            aria-label="Filter by category"
-          >
-            <option value="">All categories</option>
-            {categoryOptions.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-        </div>
+        <>
+          <div className="library-explorer__filters">
+            <select
+              className="library-explorer__select"
+              value={selectedLibraryId}
+              onChange={(e) => handleLibraryChange(e.target.value)}
+              aria-label="Library"
+            >
+              <option value="">All libraries</option>
+              {libraries.map((lib) => (
+                <option key={lib.id} value={lib.id}>
+                  {lib.name}
+                </option>
+              ))}
+            </select>
+            <input
+              type="search"
+              className="library-explorer__search"
+              placeholder="Search by name, method, path, description…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="Search blocks"
+            />
+            <select
+              className="library-explorer__select"
+              value={methodFilter}
+              onChange={(e) => setMethodFilter(e.target.value)}
+              aria-label="Filter by method"
+            >
+              <option value="">All methods</option>
+              {methods.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <select
+              className="library-explorer__select"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              aria-label="Filter by category"
+            >
+              <option value="">All categories</option>
+              {categoryOptions.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </div>
+          {isRemoteSelected && (onPullLibrary || onPushLibrary) ? (
+            <div className="library-explorer__remote-actions">
+              {libraryStatusError ? (
+                <span className="library-explorer__remote-error">
+                  {libraryStatusError}
+                </span>
+              ) : libraryStatus ? (
+                <span className="library-explorer__remote-status">
+                  {!libraryStatus.behindCount &&
+                  !libraryStatus.aheadCount &&
+                  !libraryStatus.hasUncommittedChanges
+                    ? "Up to date"
+                    : [
+                        libraryStatus.hasUncommittedChanges &&
+                          "Uncommitted changes",
+                        libraryStatus.aheadCount > 0 &&
+                          `${libraryStatus.aheadCount} commit${libraryStatus.aheadCount === 1 ? "" : "s"} to push`,
+                        libraryStatus.behindCount > 0 &&
+                          `${libraryStatus.behindCount} commit${libraryStatus.behindCount === 1 ? "" : "s"} to pull`,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                </span>
+              ) : null}
+              {libraryActionError ? (
+                <span className="library-explorer__remote-error">
+                  {libraryActionError}
+                </span>
+              ) : null}
+              {showPullFirstWarning ? (
+                <span className="library-explorer__pull-first-warning">
+                  Remote has new commits. Pull first?{" "}
+                  <button
+                    className="library-explorer__btn library-explorer__btn--secondary"
+                    type="button"
+                    disabled={libraryActionPending !== null}
+                    onClick={handlePull}
+                  >
+                    Pull
+                  </button>{" "}
+                  <button
+                    className="library-explorer__btn library-explorer__btn--secondary"
+                    type="button"
+                    onClick={() => setShowPullFirstWarning(false)}
+                  >
+                    Cancel
+                  </button>
+                </span>
+              ) : null}
+              {onPullLibrary && !showPullFirstWarning ? (
+                <button
+                  className="library-explorer__btn library-explorer__btn--secondary"
+                  type="button"
+                  disabled={libraryActionPending !== null}
+                  onClick={handlePull}
+                >
+                  {libraryActionPending === "pull" ? "Pulling…" : "Pull"}
+                </button>
+              ) : null}
+              {onPushLibrary && !showPullFirstWarning ? (
+                <>
+                  <input
+                    type="text"
+                    className="library-explorer__commit-msg"
+                    placeholder="Commit message (optional)"
+                    value={pushCommitMessage}
+                    onChange={(e) => setPushCommitMessage(e.target.value)}
+                    disabled={libraryActionPending !== null}
+                    aria-label="Commit message for push"
+                  />
+                  <button
+                    className="library-explorer__btn library-explorer__btn--secondary"
+                    type="button"
+                    disabled={libraryActionPending !== null}
+                    onClick={handlePush}
+                  >
+                    {libraryActionPending === "push" ? "Pushing…" : "Push"}
+                  </button>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+        </>
       ) : null}
 
       <div className="library-explorer__body">
@@ -264,18 +493,33 @@ const LibraryExplorerPanel = ({
           </div>
         ) : hasNoResults ? (
           <div className="library-explorer__empty">
-            <p>No blocks match the current filters.</p>
-            <button
-              className="library-explorer__btn library-explorer__btn--secondary"
-              type="button"
-              onClick={() => {
-                setSearchQuery("");
-                setMethodFilter("");
-                setCategoryFilter("");
-              }}
-            >
-              Clear filters
-            </button>
+            {isSingleLibraryEmpty && selectedLibrary ? (
+              <>
+                <p>No blocks in {selectedLibrary.name}.</p>
+                <button
+                  className="library-explorer__btn library-explorer__btn--secondary"
+                  type="button"
+                  onClick={() => setSelectedLibraryId("")}
+                >
+                  View all libraries
+                </button>
+              </>
+            ) : (
+              <>
+                <p>No blocks match the current filters.</p>
+                <button
+                  className="library-explorer__btn library-explorer__btn--secondary"
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setMethodFilter("");
+                    setCategoryFilter("");
+                  }}
+                >
+                  Clear filters
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <div className="library-explorer__groups">
@@ -292,6 +536,11 @@ const LibraryExplorerPanel = ({
                       block={block}
                       compact
                       className="block--no-drag"
+                      libraryName={
+                        libraries.find(
+                          (l) => l.id === (block.sourceLibraryId ?? "local"),
+                        )?.name ?? block.sourceLibraryId ?? "Local"
+                      }
                       onEdit={() => onEditBlock(block.id)}
                       onDelete={() => onDeleteBlock(block.id)}
                       onExport={

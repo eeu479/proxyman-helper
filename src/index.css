@@ -679,6 +679,41 @@ body[data-theme="light"] .sidebar__select {
   flex-shrink: 0;
 }
 
+.library-explorer__remote-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.library-explorer__commit-msg {
+  min-width: 160px;
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.library-explorer__remote-status {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.library-explorer__remote-error {
+  font-size: 13px;
+  color: var(--color-danger);
+}
+
+.library-explorer__pull-first-warning {
+  font-size: 13px;
+  color: var(--color-warning, #b8860b);
+}
+.library-explorer__pull-first-warning .library-explorer__btn {
+  margin-left: 4px;
+}
+
 .library-explorer__search {
   flex: 1;
   min-width: 200px;
@@ -875,6 +910,17 @@ body[data-theme="light"] .sidebar__select {
   text-overflow: ellipsis;
   min-width: 0;
   flex: 1;
+}
+
+.block__library-badge {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--color-text-subtle);
+  flex-shrink: 0;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Path shown in compact mode */
@@ -1996,6 +2042,33 @@ body[data-theme="light"] .sidebar__select {
 .settings__subprofile-name {
   font-size: 14px;
   color: var(--color-text-primary);
+}
+
+.settings__library-meta {
+  font-size: 12px;
+  color: var(--color-text-subtle);
+  font-weight: normal;
+}
+
+.settings__library-status {
+  font-size: 12px;
+  color: var(--color-text-secondary, var(--color-text-subtle));
+  font-weight: normal;
+}
+
+.settings__library-badge {
+  font-size: 12px;
+  color: var(--color-text-subtle);
+}
+
+.settings__library-add {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.settings__library-add .settings__param-row {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .settings__subprofile-actions {

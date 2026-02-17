@@ -52,4 +52,6 @@ export type Block = {
   templateValues: TemplateValue[];
   templateVariants: TemplateVariant[];
   activeVariantId?: string | null;
+  /** When set, block is stored in this library (e.g. "local" or remote library id). */
+  sourceLibraryId?: string | null;
 };

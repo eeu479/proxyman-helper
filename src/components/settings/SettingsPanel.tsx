@@ -1,6 +1,12 @@
 import type { FormEvent } from "react";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Profile } from "../../types/profile";
+import {
+  type Library,
+  type AddLibraryInput,
+  type LibraryStatus,
+  fetchLibraryStatus,
+} from "../../api/libraries";
 
 type SettingsPanelProps = {
   profiles: Profile[];
@@ -23,6 +29,11 @@ type SettingsPanelProps = {
   onExportBlocks: () => void;
   onImportBlocks: (file: File) => Promise<void>;
   importBlocksMessage: string | null;
+  libraries: Library[];
+  onAddLibrary: (input: AddLibraryInput) => Promise<void>;
+  onPullLibrary: (libId: string) => Promise<void>;
+  onPushLibrary: (libId: string) => Promise<void>;
+  onDeleteLibrary: (libId: string) => Promise<void>;
   onDeleteProfile: (profileName: string) => Promise<void>;
   deleteProfileError: string;
   isDeletingProfile: boolean;
@@ -49,11 +60,45 @@ const SettingsPanel = ({
   onExportBlocks,
   onImportBlocks,
   importBlocksMessage,
+  libraries,
+  onAddLibrary,
+  onPullLibrary,
+  onPushLibrary,
+  onDeleteLibrary,
   onDeleteProfile,
   deleteProfileError,
   isDeletingProfile,
 }: SettingsPanelProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [addLibName, setAddLibName] = useState("");
+  const [addLibUrl, setAddLibUrl] = useState("");
+  const [addLibRef, setAddLibRef] = useState("main");
+  const [addLibAuth, setAddLibAuth] = useState("");
+  const [isAddingLibrary, setIsAddingLibrary] = useState(false);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
+  const [libraryLoadingId, setLibraryLoadingId] = useState<string | null>(null);
+  const [showAddLibrary, setShowAddLibrary] = useState(false);
+  const [libraryStatusByLibId, setLibraryStatusByLibId] = useState<
+    Record<string, LibraryStatus | null>
+  >({});
+
+  useEffect(() => {
+    if (!selectedProfile) return;
+    const remoteLibs = libraries.filter((l) => l.type === "remote");
+    for (const lib of remoteLibs) {
+      fetchLibraryStatus(selectedProfile, lib.id)
+        .then((status) => {
+          setLibraryStatusByLibId((prev) => ({ ...prev, [lib.id]: status }));
+        })
+        .catch(() => {
+          setLibraryStatusByLibId((prev) => ({ ...prev, [lib.id]: null }));
+        });
+    }
+    if (remoteLibs.length === 0) {
+      setLibraryStatusByLibId({});
+    }
+  }, [selectedProfile, libraries]);
+
   const selectedProfileData =
     profiles.find((p) => p.name === selectedProfile) ?? null;
   const subprofiles = selectedProfileData?.subProfiles ?? [];
@@ -212,6 +257,240 @@ const SettingsPanel = ({
               ))
             )}
           </div>
+        </div>
+
+        <div className="settings__section">
+          <div className="settings__section-header">
+            <span className="settings__label">Libraries</span>
+            <button
+              className="settings__button settings__button--edit"
+              type="button"
+              onClick={() => {
+                setShowAddLibrary((v) => !v);
+                setLibraryError(null);
+              }}
+            >
+              {showAddLibrary ? "Cancel" : "Add remote library"}
+            </button>
+          </div>
+          <p className="settings__blocks-hint">
+            Local library stores blocks in this profile. Add remote libraries
+            from a git repo (with a <code>blocks/</code> folder of JSON files).
+          </p>
+          {libraryError ? (
+            <div className="settings__error">{libraryError}</div>
+          ) : null}
+          <div className="settings__subprofile-list">
+            {libraries.map((lib) => (
+              <div key={lib.id} className="settings__subprofile-row">
+                <div>
+                  <span className="settings__subprofile-name">
+                    {lib.name}
+                    {lib.type === "remote" ? (
+                      <span className="settings__library-meta">
+                        {" "}
+                        — {lib.gitUrl ?? ""}
+                        {lib.gitRef ? ` (${lib.gitRef})` : ""}
+                      </span>
+                    ) : null}
+                    {lib.type === "remote" && libraryStatusByLibId[lib.id] ? (
+                      <span className="settings__library-status">
+                        {" · "}
+                        {(() => {
+                          const s = libraryStatusByLibId[lib.id]!;
+                          if (
+                            !s.behindCount &&
+                            !s.aheadCount &&
+                            !s.hasUncommittedChanges
+                          ) {
+                            return "Up to date";
+                          }
+                          return [
+                            s.hasUncommittedChanges && "Uncommitted",
+                            s.aheadCount > 0 && `${s.aheadCount} to push`,
+                            s.behindCount > 0 && `${s.behindCount} to pull`,
+                          ]
+                            .filter(Boolean)
+                            .join(", ");
+                        })()}
+                      </span>
+                    ) : null}
+                  </span>
+                </div>
+                <div className="settings__subprofile-actions">
+                  {lib.type === "remote" ? (
+                    <>
+                      <button
+                        className="settings__button settings__button--edit"
+                        type="button"
+                        disabled={libraryLoadingId !== null}
+                        onClick={async () => {
+                          setLibraryLoadingId(lib.id);
+                          setLibraryError(null);
+                          try {
+                            await onPullLibrary(lib.id);
+                            const status = await fetchLibraryStatus(
+                              selectedProfile,
+                              lib.id,
+                            );
+                            setLibraryStatusByLibId((prev) => ({
+                              ...prev,
+                              [lib.id]: status,
+                            }));
+                          } catch (e) {
+                            setLibraryError(
+                              e instanceof Error ? e.message : "Pull failed",
+                            );
+                          } finally {
+                            setLibraryLoadingId(null);
+                          }
+                        }}
+                      >
+                        {libraryLoadingId === lib.id ? "Pulling…" : "Pull"}
+                      </button>
+                      <button
+                        className="settings__button settings__button--edit"
+                        type="button"
+                        disabled={libraryLoadingId !== null}
+                        onClick={async () => {
+                          setLibraryLoadingId(lib.id);
+                          setLibraryError(null);
+                          try {
+                            await onPushLibrary(lib.id);
+                            const status = await fetchLibraryStatus(
+                              selectedProfile,
+                              lib.id,
+                            );
+                            setLibraryStatusByLibId((prev) => ({
+                              ...prev,
+                              [lib.id]: status,
+                            }));
+                          } catch (e) {
+                            setLibraryError(
+                              e instanceof Error ? e.message : "Push failed",
+                            );
+                          } finally {
+                            setLibraryLoadingId(null);
+                          }
+                        }}
+                      >
+                        {libraryLoadingId === lib.id ? "Pushing…" : "Push"}
+                      </button>
+                      <button
+                        className="settings__button settings__button--danger"
+                        type="button"
+                        disabled={libraryLoadingId !== null}
+                        onClick={async () => {
+                          if (
+                            !window.confirm(
+                              `Remove remote library "${lib.name}"? The clone will be deleted.`,
+                            )
+                          ) {
+                            return;
+                          }
+                          setLibraryLoadingId(lib.id);
+                          setLibraryError(null);
+                          try {
+                            await onDeleteLibrary(lib.id);
+                          } catch (e) {
+                            setLibraryError(
+                              e instanceof Error
+                                ? e.message
+                                : "Delete failed",
+                            );
+                          } finally {
+                            setLibraryLoadingId(null);
+                          }
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </>
+                  ) : (
+                    <span className="settings__library-badge">Local</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          {showAddLibrary ? (
+            <div className="settings__library-add">
+              <div className="settings__param-row">
+                <input
+                  className="settings__input"
+                  type="text"
+                  value={addLibName}
+                  onChange={(e) => setAddLibName(e.target.value)}
+                  placeholder="Library name"
+                />
+              </div>
+              <div className="settings__param-row">
+                <input
+                  className="settings__input"
+                  type="text"
+                  value={addLibUrl}
+                  onChange={(e) => setAddLibUrl(e.target.value)}
+                  placeholder="Git URL (e.g. https://github.com/owner/repo)"
+                />
+              </div>
+              <div className="settings__param-row">
+                <input
+                  className="settings__input"
+                  type="text"
+                  value={addLibRef}
+                  onChange={(e) => setAddLibRef(e.target.value)}
+                  placeholder="Branch (default: main)"
+                />
+              </div>
+              <div className="settings__param-row">
+                <input
+                  className="settings__input"
+                  type="password"
+                  value={addLibAuth}
+                  onChange={(e) => setAddLibAuth(e.target.value)}
+                  placeholder="Auth token (optional)"
+                  autoComplete="off"
+                />
+              </div>
+              <button
+                className="settings__button settings__button--edit"
+                type="button"
+                disabled={isAddingLibrary}
+                onClick={async () => {
+                  const name = addLibName.trim();
+                  const gitUrl = addLibUrl.trim();
+                  if (!name || !gitUrl) {
+                    setLibraryError("Name and Git URL are required.");
+                    return;
+                  }
+                  setIsAddingLibrary(true);
+                  setLibraryError(null);
+                  try {
+                    await onAddLibrary({
+                      name,
+                      type: "remote",
+                      gitUrl,
+                      gitRef: addLibRef.trim() || undefined,
+                      auth: addLibAuth.trim() || undefined,
+                    });
+                    setAddLibName("");
+                    setAddLibUrl("");
+                    setAddLibRef("main");
+                    setAddLibAuth("");
+                    setShowAddLibrary(false);
+                  } catch (e) {
+                    setLibraryError(
+                      e instanceof Error ? e.message : "Add library failed",
+                    );
+                  } finally {
+                    setIsAddingLibrary(false);
+                  }
+                }}
+              >
+                {isAddingLibrary ? "Adding…" : "Add library"}
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <div className="settings__section">

@@ -1,9 +1,9 @@
 use axum::{
   body::{Body, Bytes},
-  extract::{Path, Query, State},
+  extract::{Path as AxumPath, Query, State},
   http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, Uri},
   response::{IntoResponse, Response},
-  routing::{any, get, post, put},
+  routing::{any, delete, get, post, put},
   Json, Router,
 };
 use regex::Regex;
@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use std::{
   collections::HashMap,
   collections::VecDeque,
-  path::{PathBuf},
+  path::{Path as StdPath, PathBuf},
   sync::Arc,
   time::{SystemTime, UNIX_EPOCH},
 };
@@ -49,6 +49,8 @@ struct Profile {
   active_blocks: Vec<Block>,
   #[serde(default)]
   categories: Vec<String>,
+  #[serde(default)]
+  libraries: Vec<Library>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -79,6 +81,23 @@ struct RequestConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
+struct Library {
+  id: String,
+  name: String,
+  #[serde(rename = "type")]
+  lib_type: String,
+  #[serde(default)]
+  git_url: Option<String>,
+  #[serde(default)]
+  git_ref: Option<String>,
+  #[serde(default)]
+  auth: Option<String>,
+  #[serde(default)]
+  clone_path: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
 struct Block {
   id: String,
   name: String,
@@ -97,6 +116,261 @@ struct Block {
   active_variant_id: Option<String>,
   #[serde(default)]
   category: String,
+  #[serde(default)]
+  source_library_id: Option<String>,
+}
+
+fn ensure_profile_libraries(profile: &mut Profile) {
+  if profile.libraries.is_empty() {
+    profile.libraries = vec![Library {
+      id: "local".to_string(),
+      name: "Local".to_string(),
+      lib_type: "local".to_string(),
+      git_url: None,
+      git_ref: None,
+      auth: None,
+      clone_path: None,
+    }];
+  }
+}
+
+fn migrate_store(store: &mut Store) {
+  for profile in &mut store.profiles {
+    ensure_profile_libraries(profile);
+  }
+}
+
+async fn read_blocks_from_clone_path(path: &StdPath, library_id: &str) -> Vec<Block> {
+  let blocks_dir = path.join("blocks");
+  let mut entries = match tokio::fs::read_dir(&blocks_dir).await {
+    Ok(e) => e,
+    Err(_) => return Vec::new(),
+  };
+  let mut blocks = Vec::new();
+  while let Ok(Some(entry)) = entries.next_entry().await {
+    let entry_path = entry.path();
+    if entry_path.is_file() {
+      if let Some(ext) = entry_path.extension() {
+        if ext == "json" {
+          if let Ok(data) = tokio::fs::read_to_string(&entry_path).await {
+            if let Ok(mut block) = serde_json::from_str::<Block>(&data) {
+              block.source_library_id = Some(library_id.to_string());
+              blocks.push(block);
+            }
+          }
+        }
+      }
+    }
+  }
+  blocks
+}
+
+fn do_git_clone(
+  url: &str,
+  path: &StdPath,
+  git_ref: Option<&str>,
+  auth: Option<&str>,
+) -> Result<(), String> {
+  use git2::build::RepoBuilder;
+  use git2::{Cred, FetchOptions, RemoteCallbacks};
+  let mut callbacks = RemoteCallbacks::new();
+  if let Some(token) = auth {
+    let token = token.to_string();
+    callbacks.credentials(move |_url, username, _allowed| {
+      Cred::userpass_plaintext(username.unwrap_or("git"), &token)
+    });
+  }
+  let mut fetch_options = FetchOptions::new();
+  fetch_options.remote_callbacks(callbacks);
+  let mut builder = RepoBuilder::new();
+  builder.fetch_options(fetch_options);
+  let branch = git_ref.unwrap_or("main");
+  builder.branch(branch);
+  builder.clone(url, path).map_err(|e: git2::Error| e.to_string())?;
+  Ok(())
+}
+
+fn do_git_pull(path: &StdPath, git_ref: Option<&str>) -> Result<(), String> {
+  use git2::{FetchOptions, RemoteCallbacks, Repository, ResetType};
+  let repo = Repository::open(path).map_err(|e| e.to_string())?;
+  let mut callbacks = RemoteCallbacks::new();
+  callbacks.credentials(|url, username, _allowed| {
+    if let Ok(config) = git2::Config::open_default() {
+      if let Ok(cred) = git2::Cred::credential_helper(&config, url, username) {
+        return Ok(cred);
+      }
+    }
+    username
+      .map(|u| git2::Cred::username(u))
+      .ok_or_else(|| git2::Error::from_str("no credentials"))
+      .and_then(|r| r)
+  });
+  let mut fetch_options = FetchOptions::new();
+  fetch_options.remote_callbacks(callbacks);
+  let mut remote = repo.find_remote("origin").map_err(|e| e.to_string())?;
+  remote.fetch(&[] as &[&str], Some(&mut fetch_options), None).map_err(|e| e.to_string())?;
+  remote.disconnect().map_err(|e| e.to_string())?;
+  let branch = git_ref.unwrap_or("main");
+  let remote_refname = format!("refs/remotes/origin/{}", branch);
+  let remote_ref = repo.find_reference(&remote_refname).map_err(|e| e.to_string())?;
+  let oid = remote_ref.target().ok_or_else(|| "no target".to_string())?;
+  let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
+  let local_refname = format!("refs/heads/{}", branch);
+  if let Ok(mut head) = repo.find_reference(&local_refname) {
+    head.set_target(oid, "pull").map_err(|e| e.to_string())?;
+  }
+  repo.reset(&commit.as_object(), ResetType::Hard, None).map_err(|e| e.to_string())?;
+  Ok(())
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LibraryStatusResponse {
+  has_uncommitted_changes: bool,
+  ahead_count: usize,
+  behind_count: usize,
+}
+
+fn do_git_library_status(
+  path: &StdPath,
+  git_ref: Option<&str>,
+) -> Result<LibraryStatusResponse, String> {
+  use git2::{FetchOptions, RemoteCallbacks, Repository, StatusOptions};
+  let repo = Repository::open(path).map_err(|e| e.to_string())?;
+
+  let has_uncommitted_changes = {
+    let mut opts = StatusOptions::new();
+    opts.include_untracked(true);
+    let status = repo.statuses(Some(&mut opts)).map_err(|e| e.to_string())?;
+    !status.is_empty()
+  };
+
+  let mut callbacks = RemoteCallbacks::new();
+  callbacks.credentials(|url, username, _allowed| {
+    if let Ok(config) = git2::Config::open_default() {
+      if let Ok(cred) = git2::Cred::credential_helper(&config, url, username) {
+        return Ok(cred);
+      }
+    }
+    username
+      .map(|u| git2::Cred::username(u))
+      .ok_or_else(|| git2::Error::from_str("no credentials"))
+      .and_then(|r| r)
+  });
+  let mut fetch_options = FetchOptions::new();
+  fetch_options.remote_callbacks(callbacks);
+  let mut remote = repo.find_remote("origin").map_err(|e| e.to_string())?;
+  remote.fetch(&[] as &[&str], Some(&mut fetch_options), None).map_err(|e| e.to_string())?;
+  remote.disconnect().map_err(|e| e.to_string())?;
+
+  let branch = git_ref.unwrap_or("main");
+  let local_refname = format!("refs/heads/{}", branch);
+  let remote_refname = format!("refs/remotes/origin/{}", branch);
+  let local_oid = repo
+    .refname_to_id(&local_refname)
+    .or_else(|_| {
+      repo.head()
+        .and_then(|h| h.target().ok_or_else(|| git2::Error::from_str("no head")))
+    })
+    .map_err(|e| e.to_string())?;
+  let remote_oid = repo.refname_to_id(&remote_refname).map_err(|e| e.to_string())?;
+  let (ahead, behind) = repo
+    .graph_ahead_behind(local_oid, remote_oid)
+    .map_err(|e| e.to_string())?;
+
+  Ok(LibraryStatusResponse {
+    has_uncommitted_changes,
+    ahead_count: ahead,
+    behind_count: behind,
+  })
+}
+
+fn block_id_to_filename(id: &str) -> String {
+  let safe: String = id
+    .chars()
+    .map(|c| if c == '/' || c == '\\' || c == ':' { '_' } else { c })
+    .collect();
+  format!("{}.json", safe)
+}
+
+async fn write_blocks_to_clone_path(path: &StdPath, blocks: &[Block]) -> Result<(), String> {
+  let blocks_dir = path.join("blocks");
+  tokio::fs::create_dir_all(&blocks_dir)
+    .await
+    .map_err(|e| e.to_string())?;
+  let mut existing_ids = std::collections::HashSet::new();
+  let mut entries = tokio::fs::read_dir(&blocks_dir)
+    .await
+    .map_err(|e| e.to_string())?;
+  while let Ok(Some(entry)) = entries.next_entry().await {
+    if let Some(stem) = entry.path().file_stem().and_then(|s| s.to_str()) {
+      existing_ids.insert(stem.to_string());
+    }
+  }
+  let new_ids: std::collections::HashSet<String> = blocks.iter().map(|b| b.id.clone()).collect();
+  for id in &existing_ids {
+    if !new_ids.contains(id) {
+      let f = blocks_dir.join(block_id_to_filename(id));
+      let _ = tokio::fs::remove_file(&f).await;
+    }
+  }
+  for block in blocks {
+    let json = serde_json::to_string_pretty(block).map_err(|e| e.to_string())?;
+    let f = blocks_dir.join(block_id_to_filename(&block.id));
+    tokio::fs::write(&f, json).await.map_err(|e| e.to_string())?;
+  }
+  Ok(())
+}
+
+fn do_git_commit_and_push(
+  path: &StdPath,
+  auth: Option<&str>,
+  git_ref: Option<&str>,
+  commit_message: Option<&str>,
+) -> Result<(), String> {
+  use git2::{Commit, IndexAddOption, PushOptions, RemoteCallbacks, Repository, Signature};
+  let repo = Repository::open(path).map_err(|e| e.to_string())?;
+  let mut index = repo.index().map_err(|e| e.to_string())?;
+  index
+    .add_all(["blocks"].iter(), IndexAddOption::FORCE, None)
+    .map_err(|e| e.to_string())?;
+  index.write().map_err(|e| e.to_string())?;
+  let tree_id = index.write_tree().map_err(|e| e.to_string())?;
+  let tree = repo.find_tree(tree_id).map_err(|e| e.to_string())?;
+  let sig = Signature::now("Local Proxy", "local-proxy@local").map_err(|e| e.to_string())?;
+  let head = repo.head().ok();
+  let parent_commit = head
+    .as_ref()
+    .and_then(|r| r.peel_to_commit().ok());
+  let parents: Vec<Commit<'_>> = parent_commit.into_iter().collect();
+  let parent_refs: Vec<&Commit<'_>> = parents.iter().collect();
+  let message = commit_message.unwrap_or("Update blocks");
+  repo
+    .commit(
+      Some("HEAD"),
+      &sig,
+      &sig,
+      message,
+      &tree,
+      parent_refs.as_slice(),
+    )
+    .map_err(|e| e.to_string())?;
+  let branch = git_ref.unwrap_or("main");
+  let mut callbacks = RemoteCallbacks::new();
+  if let Some(token) = auth {
+    let token = token.to_string();
+    callbacks.credentials(move |_url, username, _allowed| {
+      git2::Cred::userpass_plaintext(username.unwrap_or("git"), &token)
+    });
+  }
+  let mut push_options = PushOptions::new();
+  push_options.remote_callbacks(callbacks);
+  let mut remote = repo.find_remote("origin").map_err(|e| e.to_string())?;
+  let refspec = format!("refs/heads/{}", branch);
+  remote
+    .push(&[refspec.as_str()], Some(&mut push_options))
+    .map_err(|e| e.to_string())?;
+  Ok(())
 }
 
 fn default_value_type() -> String {
@@ -269,6 +543,29 @@ struct SetActiveProfileInput {
   name: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AddLibraryInput {
+  name: String,
+  #[serde(rename = "type")]
+  lib_type: String,
+  #[serde(default)]
+  git_url: Option<String>,
+  #[serde(default)]
+  git_ref: Option<String>,
+  #[serde(default)]
+  auth: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateLibraryInput {
+  #[serde(default)]
+  name: Option<String>,
+  #[serde(default)]
+  git_ref: Option<String>,
+}
+
 fn main() {
   tauri::Builder::default()
     .setup(|app| {
@@ -338,6 +635,26 @@ async fn run_server(app_handle: tauri::AppHandle) -> Result<(), String> {
       post(create_request),
     )
     .route(
+      "/api/profiles/:profile_name/libraries",
+      get(get_libraries).post(add_library),
+    )
+    .route(
+      "/api/profiles/:profile_name/libraries/:lib_id/status",
+      get(get_library_status),
+    )
+    .route(
+      "/api/profiles/:profile_name/libraries/:lib_id/pull",
+      post(pull_library),
+    )
+    .route(
+      "/api/profiles/:profile_name/libraries/:lib_id/push",
+      post(push_library),
+    )
+    .route(
+      "/api/profiles/:profile_name/libraries/:lib_id",
+      put(update_library).delete(delete_library),
+    )
+    .route(
       "/api/profiles/:profile_name/blocks",
       get(get_blocks).put(update_blocks),
     )
@@ -379,10 +696,12 @@ async fn ensure_data_file(path: &PathBuf) -> Result<(), String> {
 }
 
 async fn read_store(state: &AppState) -> Store {
-  match tokio::fs::read_to_string(&*state.data_file).await {
+  let mut store = match tokio::fs::read_to_string(&*state.data_file).await {
     Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
     Err(_) => default_store(),
-  }
+  };
+  migrate_store(&mut store);
+  store
 }
 
 async fn write_store(state: &AppState, store: &Store) -> Result<(), String> {
@@ -432,7 +751,7 @@ async fn get_request_counts(State(state): State<AppState>) -> Json<Vec<RequestMa
 
 async fn get_profile(
   State(state): State<AppState>,
-  Path(profile_name): Path<String>,
+  AxumPath(profile_name): AxumPath<String>,
 ) -> Response {
   let store = read_store(&state).await;
   match store.profiles.into_iter().find(|profile| profile.name == profile_name) {
@@ -455,7 +774,7 @@ async fn create_profile(
   }
 
   let profile = Profile {
-    name: input.name,
+    name: input.name.clone(),
     base_url: input.base_url.unwrap_or_default(),
     params: input.params.unwrap_or_default(),
     sub_profiles: Vec::new(),
@@ -463,6 +782,15 @@ async fn create_profile(
     library_blocks: Vec::new(),
     active_blocks: Vec::new(),
     categories: Vec::new(),
+    libraries: vec![Library {
+      id: "local".to_string(),
+      name: "Local".to_string(),
+      lib_type: "local".to_string(),
+      git_url: None,
+      git_ref: None,
+      auth: None,
+      clone_path: None,
+    }],
   };
   store.profiles.push(profile.clone());
 
@@ -479,7 +807,7 @@ async fn create_profile(
 
 async fn update_profile(
   State(state): State<AppState>,
-  Path(profile_name): Path<String>,
+  AxumPath(profile_name): AxumPath<String>,
   Json(input): Json<UpdateProfileInput>,
 ) -> Response {
   let mut store = read_store(&state).await;
@@ -547,7 +875,7 @@ async fn update_profile(
 
 async fn delete_profile(
   State(state): State<AppState>,
-  Path(profile_name): Path<String>,
+  AxumPath(profile_name): AxumPath<String>,
 ) -> Response {
   let mut store = read_store(&state).await;
   let initial_len = store.profiles.len();
@@ -579,7 +907,7 @@ async fn delete_profile(
 
 async fn create_sub_profile(
   State(state): State<AppState>,
-  Path(profile_name): Path<String>,
+  AxumPath(profile_name): AxumPath<String>,
   Json(input): Json<CreateSubProfileInput>,
 ) -> Response {
   let mut store = read_store(&state).await;
@@ -619,7 +947,7 @@ async fn create_sub_profile(
 
 async fn update_sub_profile(
   State(state): State<AppState>,
-  Path((profile_name, subprofile_name)): Path<(String, String)>,
+  AxumPath((profile_name, subprofile_name)): AxumPath<(String, String)>,
   Json(input): Json<UpdateSubProfileInput>,
 ) -> Response {
   let mut store = read_store(&state).await;
@@ -702,7 +1030,7 @@ async fn update_sub_profile(
 
 async fn delete_sub_profile(
   State(state): State<AppState>,
-  Path((profile_name, subprofile_name)): Path<(String, String)>,
+  AxumPath((profile_name, subprofile_name)): AxumPath<(String, String)>,
 ) -> Response {
   let mut store = read_store(&state).await;
   let Some(profile) = store
@@ -740,7 +1068,7 @@ async fn delete_sub_profile(
 
 async fn create_request(
   State(state): State<AppState>,
-  Path(profile_name): Path<String>,
+  AxumPath(profile_name): AxumPath<String>,
   Json(input): Json<CreateRequestInput>,
 ) -> Response {
   let mut store = read_store(&state).await;
@@ -784,9 +1112,335 @@ async fn create_request(
   (StatusCode::CREATED, Json(request)).into_response()
 }
 
+async fn get_libraries(
+  State(state): State<AppState>,
+  AxumPath(profile_name): AxumPath<String>,
+) -> Response {
+  let store = read_store(&state).await;
+  let Some(profile) = store
+    .profiles
+    .iter()
+    .find(|p| p.name == profile_name)
+  else {
+    return (StatusCode::NOT_FOUND, Json(json!({ "error": "Profile not found" })))
+      .into_response();
+  };
+  Json(profile.libraries.clone()).into_response()
+}
+
+async fn add_library(
+  State(state): State<AppState>,
+  AxumPath(profile_name): AxumPath<String>,
+  Json(input): Json<AddLibraryInput>,
+) -> Response {
+  if input.lib_type != "remote" {
+    return (
+      StatusCode::BAD_REQUEST,
+      Json(json!({ "error": "Only remote libraries are supported for add" })),
+    )
+      .into_response();
+  }
+  let Some(git_url) = &input.git_url else {
+    return (
+      StatusCode::BAD_REQUEST,
+      Json(json!({ "error": "gitUrl is required for remote library" })),
+    )
+      .into_response();
+  };
+  let data_dir = match state.data_file.parent() {
+    Some(p) => p.to_path_buf(),
+    None => {
+      return (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({ "error": "Invalid data path" })),
+      )
+        .into_response()
+    }
+  };
+  let lib_id = format!("remote-{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis());
+  let clone_path = data_dir.join("libraries").join(&profile_name).join(&lib_id);
+  if let Err(e) = tokio::fs::create_dir_all(clone_path.parent().unwrap()).await {
+    return (
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(json!({ "error": e.to_string() })),
+    )
+      .into_response();
+  }
+  let url = git_url.clone();
+  let path = clone_path.clone();
+  let git_ref = input.git_ref.clone();
+  let auth = input.auth.clone();
+  let clone_result = tokio::task::spawn_blocking(move || {
+    do_git_clone(
+      &url,
+      &path,
+      git_ref.as_deref(),
+      auth.as_deref(),
+    )
+  })
+  .await
+  .map_err(|e| e.to_string());
+  match clone_result {
+    Ok(Ok(())) => {}
+    Ok(Err(e)) => {
+      let _ = tokio::fs::remove_dir_all(&clone_path).await;
+      return (
+        StatusCode::BAD_REQUEST,
+        Json(json!({ "error": e })),
+      )
+        .into_response();
+    }
+    Err(e) => {
+      return (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({ "error": e })),
+      )
+        .into_response();
+    }
+  }
+  let clone_path_str = clone_path.to_string_lossy().to_string();
+  let new_lib = Library {
+    id: lib_id.clone(),
+    name: input.name.clone(),
+    lib_type: "remote".to_string(),
+    git_url: Some(git_url.clone()),
+    git_ref: input.git_ref.clone(),
+    auth: input.auth.clone(),
+    clone_path: Some(clone_path_str),
+  };
+  let mut store = read_store(&state).await;
+  let Some(profile) = store.profiles.iter_mut().find(|p| p.name == profile_name) else {
+    return (StatusCode::NOT_FOUND, Json(json!({ "error": "Profile not found" })))
+      .into_response();
+  };
+  profile.libraries.push(new_lib.clone());
+  if let Err(e) = write_store(&state, &store).await {
+    return (
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(json!({ "error": e })),
+    )
+      .into_response();
+  }
+  (StatusCode::CREATED, Json(new_lib)).into_response()
+}
+
+async fn pull_library(
+  State(state): State<AppState>,
+  AxumPath((profile_name, lib_id)): AxumPath<(String, String)>,
+) -> Response {
+  let store = read_store(&state).await;
+  let Some(profile) = store.profiles.iter().find(|p| p.name == profile_name) else {
+    return (StatusCode::NOT_FOUND, Json(json!({ "error": "Profile not found" })))
+      .into_response();
+  };
+  let Some(lib) = profile.libraries.iter().find(|l| l.id == lib_id) else {
+    return (StatusCode::NOT_FOUND, Json(json!({ "error": "Library not found" })))
+      .into_response();
+  };
+  if lib.lib_type != "remote" {
+    return (
+      StatusCode::BAD_REQUEST,
+      Json(json!({ "error": "Only remote libraries can be pulled" })),
+    )
+      .into_response();
+  }
+  let Some(ref clone_path) = lib.clone_path else {
+    return (
+      StatusCode::BAD_REQUEST,
+      Json(json!({ "error": "Library has no clone path" })),
+    )
+      .into_response();
+  };
+  let path = PathBuf::from(clone_path);
+  let git_ref = lib.git_ref.clone();
+  let result = tokio::task::spawn_blocking(move || do_git_pull(&path, git_ref.as_deref()))
+    .await
+    .map_err(|e| e.to_string())
+    .and_then(|r| r);
+  match result {
+    Ok(()) => Json(json!({ "ok": true })).into_response(),
+    Err(e) => (
+      StatusCode::BAD_REQUEST,
+      Json(json!({ "error": e })),
+    )
+      .into_response(),
+  }
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct PushLibraryInput {
+  #[serde(default)]
+  commit_message: Option<String>,
+}
+
+async fn push_library(
+  State(state): State<AppState>,
+  AxumPath((profile_name, lib_id)): AxumPath<(String, String)>,
+  body: Option<Json<PushLibraryInput>>,
+) -> Response {
+  let body = body.unwrap_or_default();
+  let store = read_store(&state).await;
+  let Some(profile) = store.profiles.iter().find(|p| p.name == profile_name) else {
+    return (StatusCode::NOT_FOUND, Json(json!({ "error": "Profile not found" })))
+      .into_response();
+  };
+  let Some(lib) = profile.libraries.iter().find(|l| l.id == lib_id) else {
+    return (StatusCode::NOT_FOUND, Json(json!({ "error": "Library not found" })))
+      .into_response();
+  };
+  if lib.lib_type != "remote" {
+    return (
+      StatusCode::BAD_REQUEST,
+      Json(json!({ "error": "Only remote libraries can be pushed" })),
+    )
+      .into_response();
+  }
+  let Some(ref clone_path) = lib.clone_path else {
+    return (
+      StatusCode::BAD_REQUEST,
+      Json(json!({ "error": "Library has no clone path" })),
+    )
+      .into_response();
+  };
+  let path = PathBuf::from(clone_path);
+  let auth = lib.auth.clone();
+  let git_ref = lib.git_ref.clone();
+  let commit_message = body.0.commit_message.clone();
+  let result = tokio::task::spawn_blocking(move || {
+    do_git_commit_and_push(
+      &path,
+      auth.as_deref(),
+      git_ref.as_deref(),
+      commit_message.as_deref(),
+    )
+  })
+  .await
+  .map_err(|e| e.to_string())
+  .and_then(|r| r);
+  match result {
+    Ok(()) => Json(json!({ "ok": true })).into_response(),
+    Err(e) => (
+      StatusCode::BAD_REQUEST,
+      Json(json!({ "error": e })),
+    )
+      .into_response(),
+  }
+}
+
+async fn get_library_status(
+  State(state): State<AppState>,
+  AxumPath((profile_name, lib_id)): AxumPath<(String, String)>,
+) -> Response {
+  let store = read_store(&state).await;
+  let Some(profile) = store.profiles.iter().find(|p| p.name == profile_name) else {
+    return (StatusCode::NOT_FOUND, Json(json!({ "error": "Profile not found" })))
+      .into_response();
+  };
+  let Some(lib) = profile.libraries.iter().find(|l| l.id == lib_id) else {
+    return (StatusCode::NOT_FOUND, Json(json!({ "error": "Library not found" })))
+      .into_response();
+  };
+  if lib.lib_type != "remote" {
+    return (
+      StatusCode::BAD_REQUEST,
+      Json(json!({ "error": "Only remote libraries have git status" })),
+    )
+      .into_response();
+  }
+  let Some(ref clone_path) = lib.clone_path else {
+    return (
+      StatusCode::BAD_REQUEST,
+      Json(json!({ "error": "Library has no clone path" })),
+    )
+      .into_response();
+  };
+  let path = PathBuf::from(clone_path);
+  let git_ref = lib.git_ref.clone();
+  let result = tokio::task::spawn_blocking(move || {
+    do_git_library_status(&path, git_ref.as_deref())
+  })
+  .await
+  .map_err(|e| e.to_string())
+  .and_then(|r| r);
+  match result {
+    Ok(status) => Json(status).into_response(),
+    Err(e) => (
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(json!({ "error": e })),
+    )
+      .into_response(),
+  }
+}
+
+async fn update_library(
+  State(state): State<AppState>,
+  AxumPath((profile_name, lib_id)): AxumPath<(String, String)>,
+  Json(input): Json<UpdateLibraryInput>,
+) -> Response {
+  let mut store = read_store(&state).await;
+  let Some(profile) = store.profiles.iter_mut().find(|p| p.name == profile_name) else {
+    return (StatusCode::NOT_FOUND, Json(json!({ "error": "Profile not found" })))
+      .into_response();
+  };
+  let Some(lib) = profile.libraries.iter_mut().find(|l| l.id == lib_id) else {
+    return (StatusCode::NOT_FOUND, Json(json!({ "error": "Library not found" })))
+      .into_response();
+  };
+  if let Some(name) = input.name {
+    lib.name = name;
+  }
+  if let Some(git_ref) = input.git_ref {
+    lib.git_ref = Some(git_ref);
+  }
+  let lib_clone = lib.clone();
+  if let Err(e) = write_store(&state, &store).await {
+    return (
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(json!({ "error": e })),
+    )
+      .into_response();
+  }
+  Json(lib_clone).into_response()
+}
+
+async fn delete_library(
+  State(state): State<AppState>,
+  AxumPath((profile_name, lib_id)): AxumPath<(String, String)>,
+) -> Response {
+  if lib_id == "local" {
+    return (
+      StatusCode::BAD_REQUEST,
+      Json(json!({ "error": "Cannot delete local library" })),
+    )
+      .into_response();
+  }
+  let mut store = read_store(&state).await;
+  let Some(profile) = store.profiles.iter_mut().find(|p| p.name == profile_name) else {
+    return (StatusCode::NOT_FOUND, Json(json!({ "error": "Profile not found" })))
+      .into_response();
+  };
+  let Some(lib) = profile.libraries.iter().find(|l| l.id == lib_id) else {
+    return (StatusCode::NOT_FOUND, Json(json!({ "error": "Library not found" })))
+      .into_response();
+  };
+  if let Some(ref clone_path) = lib.clone_path {
+    let _ = tokio::fs::remove_dir_all(clone_path).await;
+  }
+  profile.libraries.retain(|l| l.id != lib_id);
+  if let Err(e) = write_store(&state, &store).await {
+    return (
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(json!({ "error": e })),
+    )
+      .into_response();
+  }
+  (StatusCode::NO_CONTENT, ()).into_response()
+}
+
 async fn get_blocks(
   State(state): State<AppState>,
-  Path(profile_name): Path<String>,
+  AxumPath(profile_name): AxumPath<String>,
 ) -> Response {
   let store = read_store(&state).await;
   let Some(profile) = store
@@ -798,8 +1452,38 @@ async fn get_blocks(
       .into_response();
   };
 
+  let _data_dir = match state.data_file.parent() {
+    Some(p) => p.to_path_buf(),
+    None => {
+      return (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({ "error": "Invalid data path" })),
+      )
+        .into_response()
+    }
+  };
+
+  let mut library_blocks = Vec::new();
+  for block in profile.library_blocks {
+    let mut b = block;
+    if b.source_library_id.is_none() {
+      b.source_library_id = Some("local".to_string());
+    }
+    library_blocks.push(b);
+  }
+
+  for lib in &profile.libraries {
+    if lib.lib_type == "remote" {
+      if let Some(ref clone_path) = lib.clone_path {
+        let path = StdPath::new(clone_path);
+        let blocks = read_blocks_from_clone_path(path, &lib.id).await;
+        library_blocks.extend(blocks);
+      }
+    }
+  }
+
   Json(BlocksPayload {
-    library_blocks: profile.library_blocks,
+    library_blocks,
     active_blocks: profile.active_blocks,
     categories: profile.categories,
   })
@@ -808,7 +1492,7 @@ async fn get_blocks(
 
 async fn update_blocks(
   State(state): State<AppState>,
-  Path(profile_name): Path<String>,
+  AxumPath(profile_name): AxumPath<String>,
   Json(input): Json<BlocksPayload>,
 ) -> Response {
   let mut store = read_store(&state).await;
@@ -821,7 +1505,47 @@ async fn update_blocks(
       .into_response();
   };
 
-  profile.library_blocks = input.library_blocks.clone();
+  let local_blocks: Vec<Block> = input
+    .library_blocks
+    .iter()
+    .filter(|b| {
+      b.source_library_id
+        .as_deref()
+        .map(|id| id == "local")
+        .unwrap_or(true)
+    })
+    .cloned()
+    .collect();
+
+  let mut blocks_by_remote: HashMap<String, Vec<Block>> = HashMap::new();
+  for block in &input.library_blocks {
+    if let Some(ref sid) = block.source_library_id {
+      if *sid != "local" {
+        blocks_by_remote
+          .entry(sid.clone())
+          .or_default()
+          .push(block.clone());
+      }
+    }
+  }
+
+  for lib in &profile.libraries {
+    if lib.lib_type == "remote" {
+      if let Some(ref clone_path) = lib.clone_path {
+        let path = StdPath::new(clone_path);
+        let blocks = blocks_by_remote.get(&lib.id).cloned().unwrap_or_default();
+        if let Err(e) = write_blocks_to_clone_path(path, &blocks).await {
+          return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e })),
+          )
+            .into_response();
+        }
+      }
+    }
+  }
+
+  profile.library_blocks = local_blocks;
   profile.active_blocks = input.active_blocks.clone();
   profile.categories = input.categories.clone();
 

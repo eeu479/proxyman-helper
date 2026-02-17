@@ -163,6 +163,11 @@ const App = () => {
     moveBlockToCategory,
     addLibraryBlockToActive,
     setBlockArrayItemEnabled,
+    libraries,
+    addLibrary,
+    pullLibrary,
+    pushLibrary,
+    deleteLibrary,
   } = useBlocks({ profiles, selectedProfile });
 
   useEffect(() => {
@@ -286,8 +291,10 @@ const App = () => {
           <DebugPanel onCreateBlockFromLog={openBuilderFromLog} />
         ) : activeView === "library" ? (
           <LibraryExplorerPanel
+            profileName={selectedProfile ?? null}
             blocks={libraryBlocks}
             categories={categories}
+            libraries={libraries}
             onCreateBlock={() => setIsBuilderOpen(true)}
             onImportBlocks={handleImportBlocks}
             importBlocksMessage={importBlocksMessage}
@@ -297,6 +304,8 @@ const App = () => {
             onAddToActive={addLibraryBlockToActive}
             onSelectVariant={setBlockActiveVariant}
             onSetBlockArrayItemEnabled={setBlockArrayItemEnabled}
+            onPullLibrary={pullLibrary}
+            onPushLibrary={pushLibrary}
           />
         ) : activeView === "settings" ? (
           <SettingsPanel
@@ -336,6 +345,11 @@ const App = () => {
             onExportBlocks={handleExportBlocks}
             onImportBlocks={handleImportBlocks}
             importBlocksMessage={importBlocksMessage}
+            libraries={libraries}
+            onAddLibrary={addLibrary}
+            onPullLibrary={pullLibrary}
+            onPushLibrary={pushLibrary}
+            onDeleteLibrary={deleteLibrary}
             onDeleteProfile={handleDeleteProfile}
             deleteProfileError={deleteProfileError}
             isDeletingProfile={isDeletingProfile}
@@ -345,6 +359,7 @@ const App = () => {
             <LibraryPanel
               blocks={libraryBlocks}
               categories={categories}
+              libraries={libraries}
               onCreateBlock={() => setIsBuilderOpen(true)}
               onImportBlocks={handleImportBlocks}
               importBlocksMessage={importBlocksMessage}

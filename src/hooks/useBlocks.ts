@@ -6,6 +6,16 @@ import type {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchBlocks, updateBlocks } from "../api/blocks";
 import type { RequestLogEntry } from "../api/logs";
+import {
+  addLibrary as addLibraryApi,
+  deleteLibrary as deleteLibraryApi,
+  fetchLibraries,
+  pullLibrary as pullLibraryApi,
+  pushLibrary as pushLibraryApi,
+  type AddLibraryInput,
+  type Library,
+  type PushLibraryOptions,
+} from "../api/libraries";
 import { initialLibrary } from "../data/initialData";
 import type { Block, TemplateValue, TemplateValueType } from "../types/block";
 import { parseArrayItems } from "../types/block";
@@ -105,6 +115,12 @@ type UseBlocksReturn = {
     index: number,
     enabled: boolean,
   ) => void;
+  libraries: Library[];
+  addLibrary: (input: AddLibraryInput) => Promise<void>;
+  pullLibrary: (libId: string) => Promise<void>;
+  pushLibrary: (libId: string, options?: PushLibraryOptions) => Promise<void>;
+  deleteLibrary: (libId: string) => Promise<void>;
+  refreshBlocksAndLibraries: () => Promise<void>;
 };
 
 function dedupeBlocksById(blocks: Block[]): Block[] {
@@ -129,6 +145,10 @@ const useBlocks = ({
   const [categoriesByProfile, setCategoriesByProfile] = useState<
     Record<string, string[]>
   >({});
+  const [librariesByProfile, setLibrariesByProfile] = useState<
+    Record<string, Library[]>
+  >({});
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [builderName, setBuilderName] = useState("");
   const [builderMethod, setBuilderMethod] = useState("GET");
@@ -241,17 +261,24 @@ const useBlocks = ({
       const entries = await Promise.all(
         profiles.map(async (profile) => {
           try {
-            const blocks = await fetchBlocks(profile.name);
-            return { name: profile.name, blocks };
+            const [blocks, libraries] = await Promise.all([
+              fetchBlocks(profile.name),
+              fetchLibraries(profile.name),
+            ]);
+            return { name: profile.name, blocks, libraries };
           } catch (error) {
             if (import.meta.env.DEV) {
               console.error(
-                "[blocks] failed to load blocks",
+                "[blocks] failed to load blocks/libraries",
                 profile.name,
                 error,
               );
             }
-            return { name: profile.name, blocks: null };
+            return {
+              name: profile.name,
+              blocks: null,
+              libraries: [] as Library[],
+            };
           }
         }),
       );
@@ -310,6 +337,14 @@ const useBlocks = ({
         return next;
       });
 
+      setLibrariesByProfile((prev) => {
+        const next = { ...prev };
+        entries.forEach(({ name, libraries }) => {
+          next[name] = libraries ?? [];
+        });
+        return next;
+      });
+
       await Promise.all(
         entries.map(async ({ name, blocks }) => {
           if (!blocks) {
@@ -341,11 +376,51 @@ const useBlocks = ({
     return () => {
       isActive = false;
     };
-  }, [profiles]);
+  }, [profiles, refreshTrigger]);
 
   const libraryBlocks = libraryBlocksByProfile[selectedProfile] ?? [];
   const activeBlocks = activeBlocksByProfile[selectedProfile] ?? [];
   const categories = categoriesByProfile[selectedProfile] ?? [];
+  const libraries = librariesByProfile[selectedProfile] ?? [];
+
+  const refreshBlocksAndLibraries = useCallback(async () => {
+    setRefreshTrigger((t) => t + 1);
+  }, []);
+
+  const addLibrary = useCallback(
+    async (input: AddLibraryInput) => {
+      if (!selectedProfile) return;
+      await addLibraryApi(selectedProfile, input);
+      await refreshBlocksAndLibraries();
+    },
+    [selectedProfile, refreshBlocksAndLibraries],
+  );
+
+  const pullLibrary = useCallback(
+    async (libId: string) => {
+      if (!selectedProfile) return;
+      await pullLibraryApi(selectedProfile, libId);
+      await refreshBlocksAndLibraries();
+    },
+    [selectedProfile, refreshBlocksAndLibraries],
+  );
+
+  const pushLibrary = useCallback(
+    async (libId: string, options?: PushLibraryOptions) => {
+      if (!selectedProfile) return;
+      await pushLibraryApi(selectedProfile, libId, options);
+    },
+    [selectedProfile],
+  );
+
+  const deleteLibrary = useCallback(
+    async (libId: string) => {
+      if (!selectedProfile) return;
+      await deleteLibraryApi(selectedProfile, libId);
+      await refreshBlocksAndLibraries();
+    },
+    [selectedProfile, refreshBlocksAndLibraries],
+  );
 
   const blockIndex = useMemo(() => {
     return new Map(
@@ -662,6 +737,10 @@ const useBlocks = ({
       templateValues,
       templateVariants,
       activeVariantId,
+      sourceLibraryId: editingBlockId
+        ? (libraryBlocks.find((b) => b.id === editingBlockId)
+            ?.sourceLibraryId ?? "local")
+        : "local",
     };
 
     if (builderDescription.trim()) {
@@ -1313,6 +1392,12 @@ const useBlocks = ({
     addLibraryBlockToActive,
     removeBlockFromActive,
     setBlockArrayItemEnabled,
+    libraries,
+    addLibrary,
+    pullLibrary,
+    pushLibrary,
+    deleteLibrary,
+    refreshBlocksAndLibraries,
   };
 };
 

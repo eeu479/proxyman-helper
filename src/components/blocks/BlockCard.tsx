@@ -7,6 +7,8 @@ type BlockCardProps = {
   compact?: boolean;
   draggable?: boolean;
   className?: string;
+  /** When set, shows which library this block belongs to (e.g. "Local", remote name). */
+  libraryName?: string | null;
   onDragStart?: DragEventHandler<HTMLDivElement>;
   onDragEnd?: DragEventHandler<HTMLDivElement>;
   onPointerDown?: PointerEventHandler<HTMLDivElement>;
@@ -43,6 +45,7 @@ const BlockCard = ({
   onDelete,
   onEdit,
   onExport,
+  libraryName,
   onAddToActive,
   onRemoveFromActive,
   onSelectVariant,
@@ -98,6 +101,11 @@ const BlockCard = ({
             {METHOD_LABELS[method] ?? method.slice(0, 3)}
           </span>
           <span className="block__name">{block.name}</span>
+          {libraryName ? (
+            <span className="block__library-badge" title={`Library: ${libraryName}`}>
+              {libraryName}
+            </span>
+          ) : null}
           <div className="block__actions">
             {onRemoveFromActive ? (
               <button
