@@ -42,6 +42,10 @@ const App = () => {
     const saved = localStorage.getItem("builderLayout");
     return saved === "grid" ? "grid" : "tree";
   });
+  const [sidebarMinimized, setSidebarMinimized] = useState(() => {
+    const saved = localStorage.getItem("sidebarMinimized");
+    return saved === "true";
+  });
 
   useEffect(() => {
     document.body.dataset.theme = theme;
@@ -51,6 +55,10 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem("builderLayout", builderLayout);
   }, [builderLayout]);
+
+  useEffect(() => {
+    localStorage.setItem("sidebarMinimized", String(sidebarMinimized));
+  }, [sidebarMinimized]);
 
   const {
     profiles,
@@ -284,7 +292,7 @@ const App = () => {
   );
 
   return (
-    <div className="app">
+    <div className={`app ${sidebarMinimized ? "app--sidebar-minimized" : ""}`}>
       <Sidebar
         profiles={profiles}
         selectedProfile={selectedProfile}
@@ -292,6 +300,8 @@ const App = () => {
         activeProfileError={activeProfileError}
         activeView={activeView}
         theme={theme}
+        minimized={sidebarMinimized}
+        onToggleMinimize={() => setSidebarMinimized((m) => !m)}
         onSelectProfile={setSelectedProfile}
         onSelectSubprofile={setSelectedSubprofile}
         onChangeView={setActiveView}

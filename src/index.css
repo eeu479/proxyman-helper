@@ -78,6 +78,10 @@ body {
   padding: 24px;
 }
 
+.app--sidebar-minimized {
+  grid-template-columns: 64px minmax(0, 1fr);
+}
+
 h1 {
   margin: 0 0 12px;
   font-size: 32px;
@@ -104,6 +108,50 @@ code {
   flex-direction: column;
   gap: 24px;
   box-shadow: 0 18px 32px rgba(0, 0, 0, 0.35);
+  align-self: start;
+  height: calc(100vh - 48px);
+  overflow-y: auto;
+  min-height: 0;
+  transition: width 0.2s ease, padding 0.2s ease;
+}
+
+.sidebar--minimized {
+  width: 64px;
+  padding: 12px;
+  gap: 16px;
+}
+
+.sidebar--minimized .sidebar__header {
+  gap: 0;
+}
+
+.sidebar--minimized .sidebar__section {
+  margin: 0;
+}
+
+.sidebar__collapse-button {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border-muted);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-text-subtle);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.sidebar__collapse-button:hover {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  border-color: var(--color-accent-border);
+}
+
+.sidebar:not(.sidebar--minimized) .sidebar__collapse-button {
+  margin-bottom: 4px;
 }
 
 .sidebar__header {
@@ -259,6 +307,26 @@ body[data-theme="light"] .sidebar__select {
   background: var(--color-accent-soft);
   border-color: var(--color-accent-border);
   color: var(--color-text-accent);
+}
+
+.sidebar--minimized .sidebar__nav {
+  gap: 6px;
+}
+
+.sidebar--minimized .sidebar__nav-button {
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar--minimized .sidebar__nav-button svg {
+  flex-shrink: 0;
+}
+
+.sidebar--minimized .sidebar__footer {
+  justify-content: center;
+  padding-top: 12px;
 }
 
 .sidebar__footer {
