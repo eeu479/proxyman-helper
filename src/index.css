@@ -604,6 +604,43 @@ body[data-theme="light"] .sidebar__select {
   flex-shrink: 0;
 }
 
+.library-tree__add-wrap {
+  position: relative;
+}
+
+.library-tree__add-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  min-width: 180px;
+  padding: 6px;
+  background: var(--color-surface-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.25);
+  list-style: none;
+  z-index: 10;
+}
+
+.library-tree__add-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.library-tree__add-menu-item:hover {
+  background: var(--color-surface-muted);
+}
+
 .library-tree__toolbar {
   display: flex;
   flex-wrap: wrap;

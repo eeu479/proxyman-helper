@@ -1,11 +1,12 @@
 import type { Library } from "../../api/libraries";
 import type {
+  ChangeEvent,
   DragEvent as ReactDragEvent,
   DragEventHandler,
   KeyboardEvent,
   PointerEventHandler,
 } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Block } from "../../types/block";
 
 const UNCATEGORIZED = "Uncategorized";
@@ -66,6 +67,8 @@ type LibraryTreePanelProps = {
   libraries?: Library[];
   onCreateBlock: () => void;
   onCreateBlockInCategory?: (category: string) => void;
+  onImportBlocks?: (file: File) => Promise<void>;
+  importBlocksMessage?: string | null;
   onDragOver: DragEventHandler<HTMLDivElement>;
   onDragEnter: DragEventHandler<HTMLDivElement>;
   onDrop: DragEventHandler<HTMLDivElement>;
@@ -95,6 +98,8 @@ export default function LibraryTreePanel({
   libraries = [],
   onCreateBlock,
   onCreateBlockInCategory,
+  onImportBlocks,
+  importBlocksMessage,
   onDragOver,
   onDragEnter,
   onDrop,
@@ -112,8 +117,11 @@ export default function LibraryTreePanel({
   onMoveBlockToCategory,
   onAddToActive,
 }: LibraryTreePanelProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const addMenuRef = useRef<HTMLDivElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedFolders, setExpandedFolders] = useState<Set<string> | null>(null);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
@@ -168,6 +176,36 @@ export default function LibraryTreePanel({
   const collapseAll = () => {
     setExpandedFolders(new Set());
   };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && onImportBlocks) {
+      onImportBlocks(file).finally(() => {
+        e.target.value = "";
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (!addMenuOpen) return;
+    const handleDocClick = (e: MouseEvent) => {
+      if (addMenuRef.current?.contains(e.target as Node)) return;
+      setAddMenuOpen(false);
+    };
+    const handleKeyDown = (e: Event) => {
+      if ((e as globalThis.KeyboardEvent).key === "Escape") setAddMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleDocClick);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleDocClick);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [addMenuOpen]);
 
   const handleAddCategoryConfirm = () => {
     const trimmed = newCategoryName.trim();
@@ -239,37 +277,88 @@ export default function LibraryTreePanel({
           <h2>Library</h2>
           <span className="panel__hint">Activate blocks into the flow.</span>
         </div>
-        <div className="panel__header-actions library-tree__header-actions">
-          <button
-            className="library-tree__icon-btn library-tree__icon-btn--ghost"
-            type="button"
-            onClick={() => {
-              setIsAddingCategory(true);
-              setNewCategoryName("");
-            }}
-            title="Add category"
-            aria-label="Add category"
-          >
-            <svg className="library-tree__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-              <line x1="12" y1="11" x2="12" y2="17" />
-              <line x1="9" y1="14" x2="15" y2="14" />
-            </svg>
-          </button>
-          <button
-            className="library-tree__icon-btn library-tree__icon-btn--primary"
-            type="button"
-            onClick={onCreateBlock}
-            title="New block"
-            aria-label="New block"
-          >
-            <svg className="library-tree__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-          </button>
+        <div className="panel__header-actions library-tree__header-actions" ref={addMenuRef}>
+          <div className="library-tree__add-wrap">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              className="settings__file-input"
+              aria-hidden
+              tabIndex={-1}
+              onChange={handleFileChange}
+            />
+            <button
+              className="library-tree__icon-btn library-tree__icon-btn--primary"
+              type="button"
+              onClick={() => setAddMenuOpen((open) => !open)}
+              title="Add"
+              aria-label="Add"
+              aria-haspopup="menu"
+              aria-expanded={addMenuOpen}
+            >
+              <svg className="library-tree__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+            {addMenuOpen && (
+              <div className="library-tree__add-menu" role="menu">
+                <button
+                  type="button"
+                  className="library-tree__add-menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    setAddMenuOpen(false);
+                    onCreateBlock();
+                  }}
+                >
+                  Create request
+                </button>
+                {onImportBlocks ? (
+                  <button
+                    type="button"
+                    className="library-tree__add-menu-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setAddMenuOpen(false);
+                      handleImportClick();
+                    }}
+                  >
+                    Import request
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="library-tree__add-menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    setAddMenuOpen(false);
+                    setIsAddingCategory(true);
+                    setNewCategoryName("");
+                  }}
+                >
+                  Create category
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
+
+      {importBlocksMessage ? (
+        <div
+          className={
+            importBlocksMessage.startsWith("Invalid") ||
+            importBlocksMessage.startsWith("Import failed") ||
+            importBlocksMessage.startsWith("No profile")
+              ? "panel__message panel__message--error"
+              : "panel__message panel__message--success"
+          }
+        >
+          {importBlocksMessage}
+        </div>
+      ) : null}
 
       {!isEmpty && (
         <div className="library-tree__toolbar">

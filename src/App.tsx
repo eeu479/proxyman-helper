@@ -391,6 +391,8 @@ const App = () => {
                 setBuilderCategory(category);
                 setIsBuilderOpen(true);
               }}
+              onImportBlocks={handleImportBlocks}
+              importBlocksMessage={importBlocksMessage}
               onDragOver={allowDrop}
               onDragEnter={handleDragEnter}
               onDrop={handleDrop("library")}
