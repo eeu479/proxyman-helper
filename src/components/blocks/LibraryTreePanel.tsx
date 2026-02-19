@@ -1,12 +1,11 @@
 import type { Library } from "../../api/libraries";
 import type {
-  ChangeEvent,
   DragEvent as ReactDragEvent,
   DragEventHandler,
   KeyboardEvent,
   PointerEventHandler,
 } from "react";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import type { Block } from "../../types/block";
 
 const UNCATEGORIZED = "Uncategorized";
@@ -67,8 +66,6 @@ type LibraryTreePanelProps = {
   libraries?: Library[];
   onCreateBlock: () => void;
   onCreateBlockInCategory?: (category: string) => void;
-  onImportBlocks?: (file: File) => Promise<void>;
-  importBlocksMessage?: string | null;
   onDragOver: DragEventHandler<HTMLDivElement>;
   onDragEnter: DragEventHandler<HTMLDivElement>;
   onDrop: DragEventHandler<HTMLDivElement>;
@@ -98,8 +95,6 @@ export default function LibraryTreePanel({
   libraries = [],
   onCreateBlock,
   onCreateBlockInCategory,
-  onImportBlocks,
-  importBlocksMessage,
   onDragOver,
   onDragEnter,
   onDrop,
@@ -117,7 +112,6 @@ export default function LibraryTreePanel({
   onMoveBlockToCategory,
   onAddToActive,
 }: LibraryTreePanelProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedFolders, setExpandedFolders] = useState<Set<string> | null>(null);
   const [isAddingCategory, setIsAddingCategory] = useState(false);
@@ -173,19 +167,6 @@ export default function LibraryTreePanel({
 
   const collapseAll = () => {
     setExpandedFolders(new Set());
-  };
-
-  const handleImportClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && onImportBlocks) {
-      onImportBlocks(file).finally(() => {
-        e.target.value = "";
-      });
-    }
   };
 
   const handleAddCategoryConfirm = () => {
@@ -259,32 +240,6 @@ export default function LibraryTreePanel({
           <span className="panel__hint">Activate blocks into the flow.</span>
         </div>
         <div className="panel__header-actions library-tree__header-actions">
-          {onImportBlocks ? (
-            <>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".json"
-                className="settings__file-input"
-                aria-hidden
-                tabIndex={-1}
-                onChange={handleFileChange}
-              />
-              <button
-                className="library-tree__icon-btn library-tree__icon-btn--ghost"
-                type="button"
-                onClick={handleImportClick}
-                title="Import blocks"
-                aria-label="Import blocks"
-              >
-                <svg className="library-tree__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-              </button>
-            </>
-          ) : null}
           <button
             className="library-tree__icon-btn library-tree__icon-btn--ghost"
             type="button"
@@ -315,20 +270,6 @@ export default function LibraryTreePanel({
           </button>
         </div>
       </header>
-
-      {importBlocksMessage ? (
-        <div
-          className={
-            importBlocksMessage.startsWith("Invalid") ||
-            importBlocksMessage.startsWith("Import failed") ||
-            importBlocksMessage.startsWith("No profile")
-              ? "panel__message panel__message--error"
-              : "panel__message panel__message--success"
-          }
-        >
-          {importBlocksMessage}
-        </div>
-      ) : null}
 
       {!isEmpty && (
         <div className="library-tree__toolbar">
@@ -369,7 +310,7 @@ export default function LibraryTreePanel({
         onDrop={onDrop}
       >
         {isEmpty && !isAddingCategory ? (
-          <div className="panel__empty">No blocks. Create or import to get started.</div>
+          <div className="panel__empty">No blocks. Create a block to get started.</div>
         ) : hasNoResults ? (
           <div className="panel__empty">No blocks match the search.</div>
         ) : (
