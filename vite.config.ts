@@ -10,7 +10,10 @@ export default defineConfig(() => ({
   },
   build: {
     target: "es2021",
-    minify: process.env.TAURI_DEBUG ? false : "esbuild",
+    minify: (process.env.TAURI_DEBUG ? false : "esbuild") as
+      | boolean
+      | "esbuild"
+      | "terser",
     sourcemap: Boolean(process.env.TAURI_DEBUG),
   },
 }));

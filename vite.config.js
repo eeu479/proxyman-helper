@@ -9,7 +9,7 @@ export default defineConfig(function () { return ({
     },
     build: {
         target: "es2021",
-        minify: process.env.TAURI_DEBUG ? false : "esbuild",
+        minify: (process.env.TAURI_DEBUG ? false : "esbuild"),
         sourcemap: Boolean(process.env.TAURI_DEBUG),
     },
 }); });

@@ -331,8 +331,15 @@ const SettingsPanel = ({
                     className="settings__button settings__button--edit"
                     type="button"
                     onClick={async () => {
-                      const path = await onChooseFolder();
-                      if (path != null) setAddLibFolderPath(path);
+                      setLibraryError(null);
+                      try {
+                        const path = await onChooseFolder();
+                        if (path != null) setAddLibFolderPath(path);
+                      } catch (e) {
+                        setLibraryError(
+                          e instanceof Error ? e.message : "Could not open folder dialog",
+                        );
+                      }
                     }}
                   >
                     Choose folder

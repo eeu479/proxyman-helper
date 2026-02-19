@@ -3,7 +3,7 @@ use axum::{
     extract::{Path as AxumPath, Query, State},
     http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, Uri},
     response::{IntoResponse, Response},
-    routing::{any, delete, get, post, put},
+    routing::{any, get, post, put},
     Json, Router,
 };
 use regex::Regex;

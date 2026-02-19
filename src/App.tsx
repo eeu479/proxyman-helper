@@ -18,14 +18,10 @@ import type { Block } from "./types/block";
 
 const useChooseFolder = () =>
   useCallback(async (): Promise<string | null> => {
-    try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const result = await open({ directory: true, multiple: false });
-      if (result == null) return null;
-      return Array.isArray(result) ? result[0] ?? null : result;
-    } catch {
-      return null;
-    }
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const result = await open({ directory: true, multiple: false });
+    if (result == null) return null;
+    return Array.isArray(result) ? result[0] ?? null : result;
   }, []);
 
 const App = () => {
@@ -306,7 +302,7 @@ const App = () => {
             blocks={libraryBlocks}
             categories={categories}
             libraries={libraries}
-            onCreateBlock={() => setIsBuilderOpen(true)}
+            onCreateBlock={(libraryId) => setIsBuilderOpen(true, libraryId)}
             onImportBlocks={handleImportBlocks}
             importBlocksMessage={importBlocksMessage}
             onEditBlock={editBlock}

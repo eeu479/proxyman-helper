@@ -61,7 +61,8 @@ type LibraryExplorerPanelProps = {
   blocks: Block[];
   categories: string[];
   libraries: Library[];
-  onCreateBlock: () => void;
+  /** When creating a block, pass the selected library id so the new block is added there (undefined = local). */
+  onCreateBlock: (libraryId?: string) => void;
   onImportBlocks?: (file: File) => Promise<void>;
   importBlocksMessage?: string | null;
   onEditBlock: (blockId: string) => void;
@@ -195,7 +196,7 @@ const LibraryExplorerPanel = ({
           <button
             className="library-explorer__btn library-explorer__btn--primary"
             type="button"
-            onClick={onCreateBlock}
+            onClick={() => onCreateBlock(selectedLibraryId || undefined)}
           >
             Create block
           </button>
@@ -295,7 +296,7 @@ const LibraryExplorerPanel = ({
               <button
                 className="library-explorer__btn library-explorer__btn--primary"
                 type="button"
-                onClick={onCreateBlock}
+                onClick={() => onCreateBlock(selectedLibraryId || undefined)}
               >
                 Create block
               </button>

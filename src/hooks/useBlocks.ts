@@ -42,7 +42,8 @@ type UseBlocksReturn = {
   }[];
   builderActiveVariantId: string | null;
   isEditingBlock: boolean;
-  setIsBuilderOpen: (isOpen: boolean) => void;
+  /** When opening for a new block, pass libraryId to create the block in that library (default: local). */
+  setIsBuilderOpen: (isOpen: boolean, libraryIdForNewBlock?: string) => void;
   setBuilderName: (value: string) => void;
   setBuilderMethod: (value: string) => void;
   setBuilderPath: (value: string) => void;
@@ -144,7 +145,18 @@ const useBlocks = ({
     Record<string, Library[]>
   >({});
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [isBuilderOpen, setIsBuilderOpen] = useState(false);
+  const [isBuilderOpen, setBuilderOpenRaw] = useState(false);
+  const setIsBuilderOpen = useCallback(
+    (open: boolean, libraryId?: string) => {
+      if (open) {
+        setLibraryIdForNewBlock(libraryId ?? null);
+      } else {
+        setLibraryIdForNewBlock(null);
+      }
+      setBuilderOpenRaw(open);
+    },
+    [],
+  );
   const [builderName, setBuilderName] = useState("");
   const [builderMethod, setBuilderMethod] = useState("GET");
   const [builderPath, setBuilderPath] = useState("/api/");
@@ -168,6 +180,10 @@ const useBlocks = ({
     string | null
   >(null);
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
+  /** When creating a new block (not editing), use this library id; cleared when builder closes. */
+  const [libraryIdForNewBlock, setLibraryIdForNewBlock] = useState<
+    string | null
+  >(null);
   const dragRef = useRef<{
     blockId: string;
     source: "library" | "active";
@@ -718,7 +734,7 @@ const useBlocks = ({
       sourceLibraryId: editingBlockId
         ? (libraryBlocks.find((b) => b.id === editingBlockId)
             ?.sourceLibraryId ?? "local")
-        : "local",
+        : (libraryIdForNewBlock ?? "local"),
     };
 
     if (builderDescription.trim()) {
