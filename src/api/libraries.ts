@@ -5,10 +5,7 @@ export type Library = {
   id: string;
   name: string;
   type: "local" | "remote";
-  gitUrl?: string | null;
-  gitRef?: string | null;
-  auth?: string | null;
-  clonePath?: string | null;
+  folderPath?: string | null;
 };
 
 type ApiError = {
@@ -46,9 +43,7 @@ export const fetchLibraries = async (profileName: string): Promise<Library[]> =>
 export type AddLibraryInput = {
   name: string;
   type: "remote";
-  gitUrl: string;
-  gitRef?: string;
-  auth?: string;
+  folderPath: string;
 };
 
 export const addLibrary = async (
@@ -69,7 +64,6 @@ export const addLibrary = async (
 
 export type UpdateLibraryInput = {
   name?: string;
-  gitRef?: string;
 };
 
 export const updateLibrary = async (
@@ -96,58 +90,6 @@ export const deleteLibrary = async (
   const response = await fetch(
     `${API_BASE}/api/profiles/${encodeURIComponent(profileName)}/libraries/${encodeURIComponent(libId)}`,
     { method: "DELETE" }
-  );
-  await ensureOk(response);
-};
-
-export type LibraryStatus = {
-  hasUncommittedChanges: boolean;
-  aheadCount: number;
-  behindCount: number;
-};
-
-export const fetchLibraryStatus = async (
-  profileName: string,
-  libId: string
-): Promise<LibraryStatus> => {
-  const response = await fetch(
-    `${API_BASE}/api/profiles/${encodeURIComponent(profileName)}/libraries/${encodeURIComponent(libId)}/status`
-  );
-  await ensureOk(response);
-  return response.json() as Promise<LibraryStatus>;
-};
-
-export const pullLibrary = async (
-  profileName: string,
-  libId: string
-): Promise<void> => {
-  const response = await fetch(
-    `${API_BASE}/api/profiles/${encodeURIComponent(profileName)}/libraries/${encodeURIComponent(libId)}/pull`,
-    { method: "POST" }
-  );
-  await ensureOk(response);
-};
-
-export type PushLibraryOptions = {
-  commitMessage?: string;
-};
-
-export const pushLibrary = async (
-  profileName: string,
-  libId: string,
-  options?: PushLibraryOptions
-): Promise<void> => {
-  const body =
-    options?.commitMessage != null && options.commitMessage.trim() !== ""
-      ? JSON.stringify({ commitMessage: options.commitMessage.trim() })
-      : undefined;
-  const response = await fetch(
-    `${API_BASE}/api/profiles/${encodeURIComponent(profileName)}/libraries/${encodeURIComponent(libId)}/push`,
-    {
-      method: "POST",
-      headers: body ? { "Content-Type": "application/json" } : undefined,
-      body,
-    }
   );
   await ensureOk(response);
 };

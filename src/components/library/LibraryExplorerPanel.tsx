@@ -1,11 +1,6 @@
-import {
-  type Library,
-  type LibraryStatus,
-  type PushLibraryOptions,
-  fetchLibraryStatus,
-} from "../../api/libraries";
+import type { Library } from "../../api/libraries";
 import type { ChangeEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { Block } from "../../types/block";
 import BlockCard from "../blocks/BlockCard";
 
@@ -80,11 +75,6 @@ type LibraryExplorerPanelProps = {
     index: number,
     enabled: boolean,
   ) => void;
-  onPullLibrary?: (libId: string) => Promise<void>;
-  onPushLibrary?: (
-    libId: string,
-    options?: PushLibraryOptions,
-  ) => Promise<void>;
 };
 
 const LibraryExplorerPanel = ({
@@ -101,26 +91,12 @@ const LibraryExplorerPanel = ({
   onAddToActive,
   onSelectVariant,
   onSetBlockArrayItemEnabled,
-  onPullLibrary,
-  onPushLibrary,
 }: LibraryExplorerPanelProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [methodFilter, setMethodFilter] = useState<string>("");
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [selectedLibraryId, setSelectedLibraryId] = useState<string>("");
-  const [libraryActionPending, setLibraryActionPending] = useState<
-    "pull" | "push" | null
-  >(null);
-  const [libraryActionError, setLibraryActionError] = useState<string | null>(
-    null,
-  );
-  const [libraryStatus, setLibraryStatus] = useState<LibraryStatus | null>(null);
-  const [libraryStatusError, setLibraryStatusError] = useState<string | null>(
-    null,
-  );
-  const [showPullFirstWarning, setShowPullFirstWarning] = useState(false);
-  const [pushCommitMessage, setPushCommitMessage] = useState("");
 
   const selectedLibrary = useMemo(
     () =>
@@ -129,45 +105,6 @@ const LibraryExplorerPanel = ({
         : null,
     [libraries, selectedLibraryId],
   );
-  const isRemoteSelected = selectedLibrary?.type === "remote";
-
-  const refetchLibraryStatus = useCallback(() => {
-    if (!profileName || !selectedLibraryId) return;
-    setLibraryStatusError(null);
-    fetchLibraryStatus(profileName, selectedLibraryId)
-      .then(setLibraryStatus)
-      .catch((e) => {
-        setLibraryStatus(null);
-        setLibraryStatusError(
-          e instanceof Error ? e.message : "Failed to load status",
-        );
-      });
-  }, [profileName, selectedLibraryId]);
-
-  useEffect(() => {
-    if (!profileName || !selectedLibraryId || !isRemoteSelected) {
-      setLibraryStatus(null);
-      setLibraryStatusError(null);
-      return;
-    }
-    let cancelled = false;
-    setLibraryStatusError(null);
-    fetchLibraryStatus(profileName, selectedLibraryId)
-      .then((status) => {
-        if (!cancelled) setLibraryStatus(status);
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setLibraryStatus(null);
-          setLibraryStatusError(
-            e instanceof Error ? e.message : "Failed to load status",
-          );
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [profileName, selectedLibraryId, isRemoteSelected]);
 
   const filteredBlocks = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -248,49 +185,6 @@ const LibraryExplorerPanel = ({
 
   const handleLibraryChange = (value: string) => {
     setSelectedLibraryId(value);
-    setLibraryActionError(null);
-  };
-
-  const handlePull = async () => {
-    if (!selectedLibraryId || !onPullLibrary) return;
-    setShowPullFirstWarning(false);
-    setLibraryActionPending("pull");
-    setLibraryActionError(null);
-    try {
-      await onPullLibrary(selectedLibraryId);
-      refetchLibraryStatus();
-    } catch (e) {
-      setLibraryActionError(
-        e instanceof Error ? e.message : "Pull failed",
-      );
-    } finally {
-      setLibraryActionPending(null);
-    }
-  };
-
-  const handlePush = async () => {
-    if (!selectedLibraryId || !onPushLibrary) return;
-    if (libraryStatus && libraryStatus.behindCount > 0) {
-      setShowPullFirstWarning(true);
-      return;
-    }
-    setShowPullFirstWarning(false);
-    setLibraryActionPending("push");
-    setLibraryActionError(null);
-    try {
-      await onPushLibrary(selectedLibraryId, {
-        commitMessage:
-          pushCommitMessage.trim() !== "" ? pushCommitMessage.trim() : undefined,
-      });
-      setPushCommitMessage("");
-      refetchLibraryStatus();
-    } catch (e) {
-      setLibraryActionError(
-        e instanceof Error ? e.message : "Push failed",
-      );
-    } finally {
-      setLibraryActionPending(null);
-    }
   };
 
   return (
@@ -382,86 +276,11 @@ const LibraryExplorerPanel = ({
               ))}
             </select>
           </div>
-          {isRemoteSelected && (onPullLibrary || onPushLibrary) ? (
+          {selectedLibrary?.type === "remote" && selectedLibrary.folderPath ? (
             <div className="library-explorer__remote-actions">
-              {libraryStatusError ? (
-                <span className="library-explorer__remote-error">
-                  {libraryStatusError}
-                </span>
-              ) : libraryStatus ? (
-                <span className="library-explorer__remote-status">
-                  {!libraryStatus.behindCount &&
-                  !libraryStatus.aheadCount &&
-                  !libraryStatus.hasUncommittedChanges
-                    ? "Up to date"
-                    : [
-                        libraryStatus.hasUncommittedChanges &&
-                          "Uncommitted changes",
-                        libraryStatus.aheadCount > 0 &&
-                          `${libraryStatus.aheadCount} commit${libraryStatus.aheadCount === 1 ? "" : "s"} to push`,
-                        libraryStatus.behindCount > 0 &&
-                          `${libraryStatus.behindCount} commit${libraryStatus.behindCount === 1 ? "" : "s"} to pull`,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                </span>
-              ) : null}
-              {libraryActionError ? (
-                <span className="library-explorer__remote-error">
-                  {libraryActionError}
-                </span>
-              ) : null}
-              {showPullFirstWarning ? (
-                <span className="library-explorer__pull-first-warning">
-                  Remote has new commits. Pull first?{" "}
-                  <button
-                    className="library-explorer__btn library-explorer__btn--secondary"
-                    type="button"
-                    disabled={libraryActionPending !== null}
-                    onClick={handlePull}
-                  >
-                    Pull
-                  </button>{" "}
-                  <button
-                    className="library-explorer__btn library-explorer__btn--secondary"
-                    type="button"
-                    onClick={() => setShowPullFirstWarning(false)}
-                  >
-                    Cancel
-                  </button>
-                </span>
-              ) : null}
-              {onPullLibrary && !showPullFirstWarning ? (
-                <button
-                  className="library-explorer__btn library-explorer__btn--secondary"
-                  type="button"
-                  disabled={libraryActionPending !== null}
-                  onClick={handlePull}
-                >
-                  {libraryActionPending === "pull" ? "Pulling…" : "Pull"}
-                </button>
-              ) : null}
-              {onPushLibrary && !showPullFirstWarning ? (
-                <>
-                  <input
-                    type="text"
-                    className="library-explorer__commit-msg"
-                    placeholder="Commit message (optional)"
-                    value={pushCommitMessage}
-                    onChange={(e) => setPushCommitMessage(e.target.value)}
-                    disabled={libraryActionPending !== null}
-                    aria-label="Commit message for push"
-                  />
-                  <button
-                    className="library-explorer__btn library-explorer__btn--secondary"
-                    type="button"
-                    disabled={libraryActionPending !== null}
-                    onClick={handlePush}
-                  >
-                    {libraryActionPending === "push" ? "Pushing…" : "Push"}
-                  </button>
-                </>
-              ) : null}
+              <span className="library-explorer__remote-status">
+                Folder: {selectedLibrary.folderPath}
+              </span>
             </div>
           ) : null}
         </>

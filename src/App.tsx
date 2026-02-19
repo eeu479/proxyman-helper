@@ -16,7 +16,20 @@ import useProfiles from "./hooks/useProfiles";
 import useSubprofiles from "./hooks/useSubprofiles";
 import type { Block } from "./types/block";
 
+const useChooseFolder = () =>
+  useCallback(async (): Promise<string | null> => {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const result = await open({ directory: true, multiple: false });
+      if (result == null) return null;
+      return Array.isArray(result) ? result[0] ?? null : result;
+    } catch {
+      return null;
+    }
+  }, []);
+
 const App = () => {
+  const onChooseFolder = useChooseFolder();
   const [activeView, setActiveView] = useState<
     "builder" | "debug" | "settings" | "library"
   >("builder");
@@ -165,8 +178,6 @@ const App = () => {
     setBlockArrayItemEnabled,
     libraries,
     addLibrary,
-    pullLibrary,
-    pushLibrary,
     deleteLibrary,
   } = useBlocks({ profiles, selectedProfile });
 
@@ -304,8 +315,6 @@ const App = () => {
             onAddToActive={addLibraryBlockToActive}
             onSelectVariant={setBlockActiveVariant}
             onSetBlockArrayItemEnabled={setBlockArrayItemEnabled}
-            onPullLibrary={pullLibrary}
-            onPushLibrary={pushLibrary}
           />
         ) : activeView === "settings" ? (
           <SettingsPanel
@@ -347,12 +356,11 @@ const App = () => {
             importBlocksMessage={importBlocksMessage}
             libraries={libraries}
             onAddLibrary={addLibrary}
-            onPullLibrary={pullLibrary}
-            onPushLibrary={pushLibrary}
             onDeleteLibrary={deleteLibrary}
             onDeleteProfile={handleDeleteProfile}
             deleteProfileError={deleteProfileError}
             isDeletingProfile={isDeletingProfile}
+            onChooseFolder={onChooseFolder}
           />
         ) : (
           <>

@@ -1,6 +1,16 @@
-import type { DragEventHandler, PointerEventHandler } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type DragEventHandler,
+  type PointerEventHandler,
+} from "react";
+import { createPortal } from "react-dom";
 import type { Block } from "../../types/block";
 import { parseArrayItems } from "../../types/block";
+
+const TOOLTIP_DELAY_MS = 400;
 
 type BlockCardProps = {
   block: Block;
@@ -81,6 +91,54 @@ const BlockCard = ({
   const stopDrag = (event: { stopPropagation: () => void }) =>
     event.stopPropagation();
 
+  const nameRef = useRef<HTMLSpanElement>(null);
+  const [tooltipRect, setTooltipRect] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const tooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showTooltip = useCallback(() => {
+    tooltipTimeoutRef.current = setTimeout(() => {
+      const el = nameRef.current;
+      if (el) {
+        const r = el.getBoundingClientRect();
+        setTooltipRect({ x: r.left, y: r.top });
+      }
+    }, TOOLTIP_DELAY_MS);
+  }, []);
+
+  const hideTooltip = useCallback(() => {
+    if (tooltipTimeoutRef.current) {
+      clearTimeout(tooltipTimeoutRef.current);
+      tooltipTimeoutRef.current = null;
+    }
+    setTooltipRect(null);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (tooltipTimeoutRef.current) clearTimeout(tooltipTimeoutRef.current);
+    };
+  }, []);
+
+  const tooltipPortal =
+    tooltipRect &&
+    createPortal(
+      <div
+        className="block__name-tooltip"
+        role="tooltip"
+        style={{
+          left: tooltipRect.x,
+          top: tooltipRect.y - 4,
+          transform: "translateY(-100%)",
+        }}
+      >
+        {block.name}
+      </div>,
+      document.body,
+    );
+
   return (
     <div
       className={cardClassName}
@@ -100,12 +158,15 @@ const BlockCard = ({
           >
             {METHOD_LABELS[method] ?? method.slice(0, 3)}
           </span>
-          <span className="block__name">{block.name}</span>
-          {libraryName ? (
-            <span className="block__library-badge" title={`Library: ${libraryName}`}>
-              {libraryName}
-            </span>
-          ) : null}
+          <span
+            ref={nameRef}
+            className="block__name"
+            onMouseEnter={showTooltip}
+            onMouseLeave={hideTooltip}
+          >
+            {block.name}
+          </span>
+          {tooltipPortal}
           <div className="block__actions">
             {onRemoveFromActive ? (
               <button
@@ -177,6 +238,13 @@ const BlockCard = ({
             )}
           </div>
         </div>
+        {libraryName ? (
+          <div className="block__library-row">
+            <span className="block__library-badge" title={`Library: ${libraryName}`}>
+              {libraryName}
+            </span>
+          </div>
+        ) : null}
         {compact ? (
           <>
             <span className="block__path">{block.path}</span>

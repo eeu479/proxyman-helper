@@ -10,11 +10,8 @@ import {
   addLibrary as addLibraryApi,
   deleteLibrary as deleteLibraryApi,
   fetchLibraries,
-  pullLibrary as pullLibraryApi,
-  pushLibrary as pushLibraryApi,
   type AddLibraryInput,
   type Library,
-  type PushLibraryOptions,
 } from "../api/libraries";
 import { initialLibrary } from "../data/initialData";
 import type { Block, TemplateValue, TemplateValueType } from "../types/block";
@@ -117,8 +114,6 @@ type UseBlocksReturn = {
   ) => void;
   libraries: Library[];
   addLibrary: (input: AddLibraryInput) => Promise<void>;
-  pullLibrary: (libId: string) => Promise<void>;
-  pushLibrary: (libId: string, options?: PushLibraryOptions) => Promise<void>;
   deleteLibrary: (libId: string) => Promise<void>;
   refreshBlocksAndLibraries: () => Promise<void>;
 };
@@ -394,23 +389,6 @@ const useBlocks = ({
       await refreshBlocksAndLibraries();
     },
     [selectedProfile, refreshBlocksAndLibraries],
-  );
-
-  const pullLibrary = useCallback(
-    async (libId: string) => {
-      if (!selectedProfile) return;
-      await pullLibraryApi(selectedProfile, libId);
-      await refreshBlocksAndLibraries();
-    },
-    [selectedProfile, refreshBlocksAndLibraries],
-  );
-
-  const pushLibrary = useCallback(
-    async (libId: string, options?: PushLibraryOptions) => {
-      if (!selectedProfile) return;
-      await pushLibraryApi(selectedProfile, libId, options);
-    },
-    [selectedProfile],
   );
 
   const deleteLibrary = useCallback(
@@ -1394,8 +1372,6 @@ const useBlocks = ({
     setBlockArrayItemEnabled,
     libraries,
     addLibrary,
-    pullLibrary,
-    pushLibrary,
     deleteLibrary,
     refreshBlocksAndLibraries,
   };

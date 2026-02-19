@@ -19,9 +19,9 @@ There are no test or lint commands configured.
 ## Architecture
 
 **Frontend (React 19 + TypeScript + Vite):**
-- `src/App.tsx` — Root component, owns all top-level state, renders view based on `activeView` ("builder" | "debug" | "settings")
+- `src/App.tsx` — Root component, owns all top-level state, renders view based on `activeView` ("builder" | "debug" | "settings" | "library")
 - `src/hooks/` — Three custom hooks (`useBlocks`, `useProfiles`, `useSubprofiles`) that encapsulate all state management. No external state library; state is lifted to App and passed via props
-- `src/api/` — Thin fetch wrappers (`profiles.ts`, `blocks.ts`, `logs.ts`) that talk to the Rust backend. Base URL configurable via `VITE_LOCAL_PROXY_BASE_URL`, defaults to `http://127.0.0.1:3000`
+- `src/api/` — Thin fetch wrappers (`profiles.ts`, `blocks.ts`, `libraries.ts`, `logs.ts`) that talk to the Rust backend. Base URL configurable via `VITE_LOCAL_PROXY_BASE_URL`, defaults to `http://127.0.0.1:3000`
 - `src/components/` — Organized by feature: `blocks/`, `modals/`, `settings/`, `debug/`, `layout/`
 - `src/types/` — TypeScript type definitions for `Block` and `Profile`
 - No client-side router; view switching is state-driven via sidebar
@@ -34,10 +34,11 @@ There are no test or lint commands configured.
 - Wildcard route (`/*`) matches incoming requests against active blocks using regex pattern matching
 
 **Data Model Hierarchy:**
-- **Profile** → top-level container with `baseUrl`, `params[]`, `library_blocks[]`, `active_blocks[]`
+- **Profile** → top-level container with `baseUrl`, `params[]`, `library_blocks[]`, `active_blocks[]`, `libraries[]`
 - **SubProfile** → lives within a profile, provides param values (key-value pairs) for variable substitution
 - **Block** → reusable response template with method, path, responseTemplate, responseHeaders, templateValues, and templateVariants
 - **TemplateVariant** → alternative response values for a block; selected via `activeVariantId`
+- **Library** → each profile has a "local" library (blocks in the profile) and optionally "remote" (folder) libraries. Remote libraries are backed by a user-chosen folder; blocks are stored under `{folder_path}/blocks/*.json` and edits are written directly to those files.
 
 Profile `params` define which parameters subprofiles must provide. URL path params (e.g., `{account_id}`) are resolved from request params first, falling back to subprofile params.
 
