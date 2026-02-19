@@ -40,8 +40,8 @@ const ActivePanel = ({
     <section className="panel panel--active">
       <header className="panel__header">
         <div>
-          <h2>Active Blocks</h2>
-          <span className="panel__hint">Drop here to build the flow.</span>
+          <h2>Flow</h2>
+          <span className="panel__hint">Activate blocks from the library.</span>
         </div>
         {blocks.length > 0 ? (
           <div className="panel__header-actions">

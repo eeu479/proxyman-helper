@@ -34,6 +34,8 @@ type SettingsPanelProps = {
   deleteProfileError: string;
   isDeletingProfile: boolean;
   onChooseFolder?: () => Promise<string | null>;
+  builderLayout?: "tree" | "grid";
+  onBuilderLayoutChange?: (layout: "tree" | "grid") => void;
 };
 
 const SettingsPanel = ({
@@ -64,6 +66,8 @@ const SettingsPanel = ({
   deleteProfileError,
   isDeletingProfile,
   onChooseFolder,
+  builderLayout = "tree",
+  onBuilderLayoutChange,
 }: SettingsPanelProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [addLibName, setAddLibName] = useState("");
@@ -96,6 +100,38 @@ const SettingsPanel = ({
         <header className="settings__header">
           <h2>Settings</h2>
         </header>
+        {onBuilderLayoutChange ? (
+          <div className="settings__section">
+            <span className="settings__label">Builder layout</span>
+            <p className="settings__blocks-hint">
+              Choose how the library and flow appear on the builder page.
+            </p>
+            <div className="settings__layout-toggle">
+              <label className="settings__layout-option">
+                <input
+                  type="radio"
+                  name="builderLayout"
+                  value="tree"
+                  checked={builderLayout === "tree"}
+                  onChange={() => onBuilderLayoutChange("tree")}
+                />
+                <span>Tree</span>
+                <span className="settings__layout-desc">Library as folders, two columns</span>
+              </label>
+              <label className="settings__layout-option">
+                <input
+                  type="radio"
+                  name="builderLayout"
+                  value="grid"
+                  checked={builderLayout === "grid"}
+                  onChange={() => onBuilderLayoutChange("grid")}
+                />
+                <span>Grid (classic)</span>
+                <span className="settings__layout-desc">Category groups, stacked panels</span>
+              </label>
+            </div>
+          </div>
+        ) : null}
         <p className="settings__empty">Select a profile to view settings.</p>
       </section>
     );
@@ -108,6 +144,39 @@ const SettingsPanel = ({
       </header>
 
       <form className="settings__form" onSubmit={onSave}>
+        {onBuilderLayoutChange ? (
+          <div className="settings__section">
+            <span className="settings__label">Builder layout</span>
+            <p className="settings__blocks-hint">
+              Choose how the library and flow appear on the builder page.
+            </p>
+            <div className="settings__layout-toggle">
+              <label className="settings__layout-option">
+                <input
+                  type="radio"
+                  name="builderLayout"
+                  value="tree"
+                  checked={builderLayout === "tree"}
+                  onChange={() => onBuilderLayoutChange("tree")}
+                />
+                <span>Tree</span>
+                <span className="settings__layout-desc">Library as folders, two columns</span>
+              </label>
+              <label className="settings__layout-option">
+                <input
+                  type="radio"
+                  name="builderLayout"
+                  value="grid"
+                  checked={builderLayout === "grid"}
+                  onChange={() => onBuilderLayoutChange("grid")}
+                />
+                <span>Grid (classic)</span>
+                <span className="settings__layout-desc">Category groups, stacked panels</span>
+              </label>
+            </div>
+          </div>
+        ) : null}
+
         <div className="settings__section">
           <label className="settings__label" htmlFor="settings-profile-name">
             Profile Name

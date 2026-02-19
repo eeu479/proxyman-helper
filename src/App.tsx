@@ -3,6 +3,7 @@ import type { BlocksPayload } from "./api/blocks";
 import { updateBlocks } from "./api/blocks";
 import ActivePanel from "./components/blocks/ActivePanel";
 import LibraryPanel from "./components/blocks/LibraryPanel";
+import LibraryTreePanel from "./components/blocks/LibraryTreePanel";
 import DebugPanel from "./components/debug/DebugPanel";
 import LibraryExplorerPanel from "./components/library/LibraryExplorerPanel";
 import Sidebar from "./components/layout/Sidebar";
@@ -37,11 +38,19 @@ const App = () => {
     const saved = localStorage.getItem("theme");
     return saved === "light" ? "light" : "dark";
   });
+  const [builderLayout, setBuilderLayout] = useState<"tree" | "grid">(() => {
+    const saved = localStorage.getItem("builderLayout");
+    return saved === "grid" ? "grid" : "tree";
+  });
 
   useEffect(() => {
     document.body.dataset.theme = theme;
     localStorage.setItem("theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem("builderLayout", builderLayout);
+  }, [builderLayout]);
 
   const {
     profiles,
@@ -133,6 +142,7 @@ const App = () => {
     setBuilderMethod,
     setBuilderPath,
     setBuilderDescription,
+    setBuilderCategory,
     setBuilderResponseTemplate,
     setBuilderActiveVariantId,
     addTemplateVariant,
@@ -292,7 +302,7 @@ const App = () => {
       />
 
       <main
-        className={`main ${activeView !== "builder" ? "main--single" : ""}`}
+        className={`main ${activeView === "builder" ? (builderLayout === "tree" ? "main--builder" : "") : "main--single"}`}
       >
         {activeView === "debug" ? (
           <DebugPanel onCreateBlockFromLog={openBuilderFromLog} />
@@ -357,7 +367,54 @@ const App = () => {
             deleteProfileError={deleteProfileError}
             isDeletingProfile={isDeletingProfile}
             onChooseFolder={onChooseFolder}
+            builderLayout={builderLayout}
+            onBuilderLayoutChange={setBuilderLayout}
           />
+        ) : builderLayout === "tree" ? (
+          <>
+            <LibraryTreePanel
+              blocks={libraryBlocks}
+              categories={categories}
+              libraries={libraries}
+              onCreateBlock={() => setIsBuilderOpen(true)}
+              onCreateBlockInCategory={(category) => {
+                setBuilderCategory(category);
+                setIsBuilderOpen(true);
+              }}
+              onImportBlocks={handleImportBlocks}
+              importBlocksMessage={importBlocksMessage}
+              onDragOver={allowDrop}
+              onDragEnter={handleDragEnter}
+              onDrop={handleDrop("library")}
+              onDragStart={(blockId) => handleDragStart(blockId, "library")}
+              onDragEnd={handleDragEnd}
+              onPointerDown={(blockId) => handlePointerDown(blockId, "library")}
+              onDeleteBlock={removeLibraryBlock}
+              onEditBlock={editBlock}
+              onExportBlock={handleExportBlock}
+              onSelectVariant={setBlockActiveVariant}
+              onSetBlockArrayItemEnabled={setBlockArrayItemEnabled}
+              onAddCategory={addCategory}
+              onRenameCategory={renameCategory}
+              onDeleteCategory={deleteCategory}
+              onMoveBlockToCategory={moveBlockToCategory}
+              onAddToActive={addLibraryBlockToActive}
+            />
+            <ActivePanel
+              blocks={activeBlocks}
+              onDragOver={allowDrop}
+              onDragEnter={handleDragEnter}
+              onDropActive={handleDrop("active")}
+              onDropLibrary={handleDrop("library")}
+              onDragStart={(blockId) => handleDragStart(blockId, "active")}
+              onDragEnd={handleDragEnd}
+              onPointerDown={(blockId) => handlePointerDown(blockId, "active")}
+              onRemoveFromActive={removeBlockFromActive}
+              onClearActive={clearActiveBlocks}
+              onSelectVariant={setBlockActiveVariant}
+              onSetBlockArrayItemEnabled={setBlockArrayItemEnabled}
+            />
+          </>
         ) : (
           <>
             <LibraryPanel
