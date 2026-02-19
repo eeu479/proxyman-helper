@@ -863,6 +863,22 @@ body[data-theme="light"] .sidebar__select {
   white-space: nowrap;
 }
 
+.library-tree__block-file-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--color-text-subtle);
+  opacity: 0.75;
+}
+
+.library-tree__block-file-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
 .library-tree__block-actions {
   flex-shrink: 0;
 }

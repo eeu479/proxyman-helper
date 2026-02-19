@@ -1,12 +1,12 @@
-import type { Library } from "../../api/libraries";
 import type {
   ChangeEvent,
-  DragEvent as ReactDragEvent,
   DragEventHandler,
   KeyboardEvent,
   PointerEventHandler,
+  DragEvent as ReactDragEvent,
 } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { Library } from "../../api/libraries";
 import type { Block } from "../../types/block";
 
 const UNCATEGORIZED = "Uncategorized";
@@ -120,7 +120,9 @@ export default function LibraryTreePanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [expandedFolders, setExpandedFolders] = useState<Set<string> | null>(null);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string> | null>(
+    null,
+  );
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -136,7 +138,9 @@ export default function LibraryTreePanel({
       const method = (block.method ?? "").toLowerCase();
       const path = (block.path ?? "").toLowerCase();
       const description = (block.description ?? "").toLowerCase();
-      const category = ((block.category ?? "").trim() || UNCATEGORIZED).toLowerCase();
+      const category = (
+        (block.category ?? "").trim() || UNCATEGORIZED
+      ).toLowerCase();
       return (
         name.includes(q) ||
         method.includes(q) ||
@@ -159,7 +163,8 @@ export default function LibraryTreePanel({
 
   const toggleFolder = (category: string) => {
     setExpandedFolders((prev) => {
-      const base = prev === null ? new Set(grouped.map((g) => g.category)) : new Set(prev);
+      const base =
+        prev === null ? new Set(grouped.map((g) => g.category)) : new Set(prev);
       if (base.has(category)) {
         base.delete(category);
       } else {
@@ -197,7 +202,8 @@ export default function LibraryTreePanel({
       setAddMenuOpen(false);
     };
     const handleKeyDown = (e: Event) => {
-      if ((e as globalThis.KeyboardEvent).key === "Escape") setAddMenuOpen(false);
+      if ((e as globalThis.KeyboardEvent).key === "Escape")
+        setAddMenuOpen(false);
     };
     document.addEventListener("mousedown", handleDocClick);
     document.addEventListener("keydown", handleKeyDown);
@@ -249,7 +255,10 @@ export default function LibraryTreePanel({
     const payload = e.dataTransfer.getData("text/plain");
     if (payload) {
       try {
-        const parsed = JSON.parse(payload) as { blockId: string; source: string };
+        const parsed = JSON.parse(payload) as {
+          blockId: string;
+          source: string;
+        };
         blockId = parsed.blockId;
         source = parsed.source;
       } catch {
@@ -267,6 +276,11 @@ export default function LibraryTreePanel({
     block.sourceLibraryId ??
     "Local";
 
+  const getBlockLibrary = (block: Block) =>
+    block.sourceLibraryId && block.sourceLibraryId !== "local"
+      ? (libraries.find((l) => l.id === block.sourceLibraryId) ?? null)
+      : null;
+
   const isEmpty = blocks.length === 0;
   const hasNoResults = !isEmpty && filteredBlocks.length === 0;
 
@@ -277,7 +291,10 @@ export default function LibraryTreePanel({
           <h2>Library</h2>
           <span className="panel__hint">Activate blocks into the flow.</span>
         </div>
-        <div className="panel__header-actions library-tree__header-actions" ref={addMenuRef}>
+        <div
+          className="panel__header-actions library-tree__header-actions"
+          ref={addMenuRef}
+        >
           <div className="library-tree__add-wrap">
             <input
               ref={fileInputRef}
@@ -297,7 +314,16 @@ export default function LibraryTreePanel({
               aria-haspopup="menu"
               aria-expanded={addMenuOpen}
             >
-              <svg className="library-tree__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <svg
+                className="library-tree__icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
               </svg>
@@ -399,11 +425,17 @@ export default function LibraryTreePanel({
         onDrop={onDrop}
       >
         {isEmpty && !isAddingCategory ? (
-          <div className="panel__empty">No blocks. Create a block to get started.</div>
+          <div className="panel__empty">
+            No blocks. Create a block to get started.
+          </div>
         ) : hasNoResults ? (
           <div className="panel__empty">No blocks match the search.</div>
         ) : (
-          <ul className="library-tree" role="tree" aria-label="Library folders and blocks">
+          <ul
+            className="library-tree"
+            role="tree"
+            aria-label="Library folders and blocks"
+          >
             {grouped.map(({ category, blocks: categoryBlocks }) => {
               const isExpanded = expandedSet.has(category);
               const isDragOver = dragOverCategory === category;
@@ -429,10 +461,7 @@ export default function LibraryTreePanel({
                       }
                     }}
                   >
-                    <span
-                      className="library-tree__chevron"
-                      aria-hidden
-                    >
+                    <span className="library-tree__chevron" aria-hidden>
                       {isExpanded ? "\u25BC" : "\u25B6"}
                     </span>
                     {editingCategory === category ? (
@@ -444,7 +473,9 @@ export default function LibraryTreePanel({
                           className="library-tree__folder-input"
                           type="text"
                           value={editingCategoryName}
-                          onChange={(e) => setEditingCategoryName(e.target.value)}
+                          onChange={(e) =>
+                            setEditingCategoryName(e.target.value)
+                          }
                           onKeyDown={(e) => {
                             if (e.key === "Enter") handleRenameConfirm();
                             if (e.key === "Escape") {
@@ -459,7 +490,9 @@ export default function LibraryTreePanel({
                       </div>
                     ) : (
                       <>
-                        <span className="library-tree__folder-label">{category}</span>
+                        <span className="library-tree__folder-label">
+                          {category}
+                        </span>
                         {category !== UNCATEGORIZED && (
                           <div className="library-tree__folder-actions">
                             <button
@@ -482,7 +515,9 @@ export default function LibraryTreePanel({
                                 title="Add block in this category"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  onCreateBlockInCategory(category === UNCATEGORIZED ? "" : category);
+                                  onCreateBlockInCategory(
+                                    category === UNCATEGORIZED ? "" : category,
+                                  );
                                 }}
                                 aria-label={`Add block in ${category}`}
                               >
@@ -524,17 +559,56 @@ export default function LibraryTreePanel({
                             onPointerDown={onPointerDown(block.id)}
                             onDoubleClick={() => onEditBlock(block.id)}
                           >
-                            <span className="library-tree__block-method" aria-hidden>
+                            <span
+                              className="library-tree__block-method"
+                              aria-hidden
+                            >
                               {block.method.toUpperCase()}
                             </span>
-                            <span className="library-tree__block-label" title={block.path}>
+                            <span
+                              className="library-tree__block-label"
+                              title={block.path}
+                            >
                               {block.name || block.path}
                             </span>
-                            {block.sourceLibraryId && block.sourceLibraryId !== "local" ? (
-                              <span className="library-tree__block-badge" title={getLibraryName(block)}>
-                                {getLibraryName(block)}
-                              </span>
-                            ) : null}
+                            {(() => {
+                              const lib = getBlockLibrary(block);
+                              if (!lib) return null;
+                              const name = getLibraryName(block);
+                              if (lib.type === "remote") {
+                                return (
+                                  <span
+                                    className="library-tree__block-file-icon"
+                                    title={name}
+                                    aria-label={`From library: ${name}`}
+                                  >
+                                    <svg
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      aria-hidden
+                                    >
+                                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                      <polyline points="14 2 14 8 20 8" />
+                                      <line x1="16" y1="13" x2="8" y2="13" />
+                                      <line x1="16" y1="17" x2="8" y2="17" />
+                                      <line x1="10" y1="9" x2="8" y2="9" />
+                                    </svg>
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span
+                                  className="library-tree__block-badge"
+                                  title={name}
+                                >
+                                  {name}
+                                </span>
+                              );
+                            })()}
                             <div className="library-tree__block-actions">
                               <button
                                 type="button"
@@ -561,7 +635,10 @@ export default function LibraryTreePanel({
             {isAddingCategory && (
               <li className="library-tree__folder-wrap" role="treeitem">
                 <div className="library-tree__folder library-tree__folder--edit">
-                  <span className="library-tree__chevron library-tree__chevron--empty" aria-hidden />
+                  <span
+                    className="library-tree__chevron library-tree__chevron--empty"
+                    aria-hidden
+                  />
                   <input
                     className="library-tree__folder-input"
                     type="text"
