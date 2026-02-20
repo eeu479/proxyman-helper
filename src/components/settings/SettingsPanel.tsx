@@ -9,7 +9,7 @@ import {
 const SETTINGS_SECTION_KEY = "settingsSection";
 
 type SectionId =
-  | "general"
+  | "layout"
   | "profile"
   | "libraries"
   | "blocks"
@@ -48,7 +48,7 @@ type SettingsPanelProps = {
 };
 
 const SECTIONS: { id: SectionId; label: string }[] = [
-  { id: "general", label: "General" },
+  { id: "layout", label: "Layout" },
   { id: "profile", label: "Profile" },
   { id: "libraries", label: "Libraries" },
   { id: "blocks", label: "Blocks" },
@@ -103,12 +103,12 @@ const SettingsPanel = ({
     const saved = localStorage.getItem(SETTINGS_SECTION_KEY);
     if (saved && SECTIONS.some((s) => s.id === saved)) return saved as SectionId;
     if (saved === "parameters" || saved === "subprofiles") return "profile";
-    return "general";
+    return "layout";
   });
 
   const sectionsWithAvailability = SECTIONS.map((s) => ({
     ...s,
-    available: s.id === "general" || hasProfile,
+    available: s.id === "layout" || hasProfile,
   }));
 
   const visibleSections = sectionsWithAvailability.filter((s) => s.available);
@@ -117,7 +117,7 @@ const SettingsPanel = ({
 
   useEffect(() => {
     if (!currentSectionValid) {
-      setActiveSection("general");
+      setActiveSection("layout");
     }
   }, [currentSectionValid]);
 
@@ -159,7 +159,7 @@ const SettingsPanel = ({
         </nav>
 
         <div className="settings__content">
-          {activeSection === "general" && (
+          {activeSection === "layout" && (
             <>
               {onBuilderLayoutChange ? (
                 <div className="settings__section">

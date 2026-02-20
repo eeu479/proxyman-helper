@@ -315,7 +315,10 @@ const App = () => {
         className={`main ${activeView === "builder" ? (builderLayout === "tree" ? "main--builder" : "") : "main--single"}`}
       >
         {activeView === "debug" ? (
-          <DebugPanel onCreateBlockFromLog={openBuilderFromLog} />
+          <DebugPanel
+            selectedProfile={selectedProfile}
+            onCreateBlockFromLog={openBuilderFromLog}
+          />
         ) : activeView === "library" ? (
           <LibraryExplorerPanel
             profileName={selectedProfile ?? null}
