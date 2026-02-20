@@ -7,7 +7,6 @@ type ActivePanelProps = {
   onDragOver: DragEventHandler<HTMLDivElement>;
   onDragEnter: DragEventHandler<HTMLDivElement>;
   onDropActive: DragEventHandler<HTMLDivElement>;
-  onDropLibrary: DragEventHandler<HTMLDivElement>;
   onDragStart: (blockId: string) => DragEventHandler<HTMLDivElement>;
   onDragEnd: () => void;
   onPointerDown: (blockId: string) => PointerEventHandler<HTMLDivElement>;
@@ -27,7 +26,6 @@ const ActivePanel = ({
   onDragOver,
   onDragEnter,
   onDropActive,
-  onDropLibrary,
   onDragStart,
   onDragEnd,
   onPointerDown,
@@ -86,15 +84,6 @@ const ActivePanel = ({
             ))}
           </div>
         )}
-      </div>
-      <div
-        className="panel__footer"
-        data-drop-zone="library"
-        onDragOver={onDragOver}
-        onDragEnter={onDragEnter}
-        onDrop={onDropLibrary}
-      >
-        Drag here to remove from active.
       </div>
     </section>
   );

@@ -174,7 +174,7 @@ const DebugPanel = ({ selectedProfile, onCreateBlockFromLog }: DebugPanelProps) 
     <section className="panel debug">
       <header className="panel__header">
         <div>
-          <h2>Debug</h2>
+          <h2>Request Feed</h2>
           <p className="panel__hint">Live request stream from the proxy server.</p>
           <p className="panel__hint">
             API base

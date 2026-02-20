@@ -418,7 +418,6 @@ const App = () => {
               onDragOver={allowDrop}
               onDragEnter={handleDragEnter}
               onDropActive={handleDrop("active")}
-              onDropLibrary={handleDrop("library")}
               onDragStart={(blockId) => handleDragStart(blockId, "active")}
               onDragEnd={handleDragEnd}
               onPointerDown={(blockId) => handlePointerDown(blockId, "active")}
@@ -458,7 +457,6 @@ const App = () => {
               onDragOver={allowDrop}
               onDragEnter={handleDragEnter}
               onDropActive={handleDrop("active")}
-              onDropLibrary={handleDrop("library")}
               onDragStart={(blockId) => handleDragStart(blockId, "active")}
               onDragEnd={handleDragEnd}
               onPointerDown={(blockId) => handlePointerDown(blockId, "active")}

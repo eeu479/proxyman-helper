@@ -2585,12 +2585,12 @@ body[data-theme="light"] .library-explorer__select {
 }
 
 .settings__button--danger {
-  background: rgba(248, 113, 113, 0.15);
-  color: var(--color-danger-soft);
+  background: rgba(248, 113, 113, 0.22);
+  color: var(--color-danger);
 }
 
 .settings__button--danger:hover {
-  background: rgba(248, 113, 113, 0.25);
+  background: rgba(248, 113, 113, 0.35);
 }
 
 .settings__param-row {

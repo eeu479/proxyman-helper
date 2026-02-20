@@ -163,9 +163,9 @@ const SettingsPanel = ({
             <>
               {onBuilderLayoutChange ? (
                 <div className="settings__section">
-                  <span className="settings__label">Builder layout</span>
+                  <span className="settings__label">Mocks layout</span>
                   <p className="settings__blocks-hint">
-                    Choose how the library and flow appear on the builder page.
+                    Choose how the library and flow appear on the Mocks page.
                   </p>
                   <div className="settings__layout-toggle">
                     <label className="settings__layout-option">

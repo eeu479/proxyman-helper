@@ -10,7 +10,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     collections::VecDeque,
     path::{Path as StdPath, PathBuf},
     sync::Arc,
@@ -157,18 +157,77 @@ async fn read_blocks_from_path(path: &StdPath, library_id: &str) -> Vec<Block> {
     blocks
 }
 
-fn block_id_to_filename(id: &str) -> String {
-    let safe: String = id
+/// Sanitizes a string for use as part of a filename: replace unsafe chars with `_`, trim, collapse repeated `_`.
+/// Returns `fallback` if the result would be empty.
+fn sanitize_for_filename(s: &str, fallback: &str) -> String {
+    const UNSAFE: &[char] = &['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
+    let safe: String = s
         .chars()
-        .map(|c| {
-            if c == '/' || c == '\\' || c == ':' {
-                '_'
+        .map(|c| if UNSAFE.contains(&c) { '_' } else { c })
+        .collect();
+    let trimmed = safe.trim().trim_matches('_');
+    let collapsed: String = trimmed
+        .chars()
+        .fold((String::new(), false), |(mut acc, mut prev_underscore), c| {
+            let is_underscore = c == '_';
+            if is_underscore && prev_underscore {
+                (acc, true)
             } else {
-                c
+                prev_underscore = is_underscore;
+                acc.push(c);
+                (acc, prev_underscore)
             }
         })
-        .collect();
-    format!("{}.json", safe)
+        .0;
+    if collapsed.is_empty() {
+        fallback.to_string()
+    } else {
+        collapsed
+    }
+}
+
+/// Builds a stable mapping from block.id to filename stem: `method-requestName` or `method-requestName-2`, etc.
+fn blocks_to_filename_stems(blocks: &[Block]) -> HashMap<String, String> {
+    let method_fallback = "REQUEST";
+    let name_fallback = "unnamed";
+    #[derive(Eq, PartialEq, Hash, Clone)]
+    struct Key {
+        method: String,
+        name: String,
+    }
+    let mut groups: HashMap<Key, Vec<&Block>> = HashMap::new();
+    for block in blocks {
+        let method = sanitize_for_filename(
+            &block.method.trim().to_uppercase(),
+            method_fallback,
+        );
+        let name = if block.name.trim().is_empty() {
+            sanitize_for_filename(&block.id, name_fallback)
+        } else {
+            sanitize_for_filename(block.name.trim(), name_fallback)
+        };
+        let key = Key {
+            method: method.clone(),
+            name: name.clone(),
+        };
+        groups.entry(key).or_default().push(block);
+    }
+    for group in groups.values_mut() {
+        group.sort_by(|a, b| a.id.cmp(&b.id));
+    }
+    let mut out = HashMap::new();
+    for (key, group) in groups {
+        let base = format!("{}-{}", key.method, key.name);
+        for (i, block) in group.into_iter().enumerate() {
+            let stem = if i == 0 {
+                base.clone()
+            } else {
+                format!("{}-{}", base, i + 1)
+            };
+            out.insert(block.id.clone(), stem);
+        }
+    }
+    out
 }
 
 async fn write_blocks_to_path(path: &StdPath, blocks: &[Block]) -> Result<(), String> {
@@ -176,25 +235,25 @@ async fn write_blocks_to_path(path: &StdPath, blocks: &[Block]) -> Result<(), St
     tokio::fs::create_dir_all(&blocks_dir)
         .await
         .map_err(|e| e.to_string())?;
-    let mut existing_ids = std::collections::HashSet::new();
+    let id_to_stem = blocks_to_filename_stems(blocks);
+    let new_stems: HashSet<String> = id_to_stem.values().cloned().collect();
     let mut entries = tokio::fs::read_dir(&blocks_dir)
         .await
         .map_err(|e| e.to_string())?;
     while let Ok(Some(entry)) = entries.next_entry().await {
-        if let Some(stem) = entry.path().file_stem().and_then(|s| s.to_str()) {
-            existing_ids.insert(stem.to_string());
-        }
-    }
-    let new_ids: std::collections::HashSet<String> = blocks.iter().map(|b| b.id.clone()).collect();
-    for id in &existing_ids {
-        if !new_ids.contains(id) {
-            let f = blocks_dir.join(block_id_to_filename(id));
-            let _ = tokio::fs::remove_file(&f).await;
+        let entry_path = entry.path();
+        if entry_path.is_file() {
+            if let Some(stem) = entry_path.file_stem().and_then(|s| s.to_str()) {
+                if !new_stems.contains(stem) {
+                    let _ = tokio::fs::remove_file(&entry_path).await;
+                }
+            }
         }
     }
     for block in blocks {
+        let stem = id_to_stem.get(&block.id).map(String::as_str).unwrap_or(&block.id);
         let json = serde_json::to_string_pretty(block).map_err(|e| e.to_string())?;
-        let f = blocks_dir.join(block_id_to_filename(&block.id));
+        let f = blocks_dir.join(format!("{}.json", stem));
         tokio::fs::write(&f, json)
             .await
             .map_err(|e| e.to_string())?;
