@@ -389,10 +389,10 @@ const App = () => {
               blocks={libraryBlocks}
               categories={categories}
               libraries={libraries}
-              onCreateBlock={() => setIsBuilderOpen(true)}
-              onCreateBlockInCategory={(category) => {
+              onCreateBlock={(libraryId) => setIsBuilderOpen(true, libraryId)}
+              onCreateBlockInCategory={(category, libraryId) => {
                 setBuilderCategory(category);
-                setIsBuilderOpen(true);
+                setIsBuilderOpen(true, libraryId);
               }}
               onImportBlocks={handleImportBlocks}
               importBlocksMessage={importBlocksMessage}
@@ -433,7 +433,7 @@ const App = () => {
               blocks={libraryBlocks}
               categories={categories}
               libraries={libraries}
-              onCreateBlock={() => setIsBuilderOpen(true)}
+              onCreateBlock={(libraryId) => setIsBuilderOpen(true, libraryId)}
               onImportBlocks={handleImportBlocks}
               importBlocksMessage={importBlocksMessage}
               onDragOver={allowDrop}
