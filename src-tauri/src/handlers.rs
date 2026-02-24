@@ -856,3 +856,176 @@ pub async fn proxy_handler(
         }
     }
 }
+
+// --- Proxy management handlers ---
+
+pub async fn proxy_status(State(_state): State<AppState>) -> Json<Value> {
+    let local_ip = local_ip_address::local_ip()
+        .map(|ip| ip.to_string())
+        .unwrap_or_else(|_| "unknown".to_string());
+
+    Json(json!({
+        "enabled": true,
+        "port": 9090,
+        "localIp": local_ip,
+        "apiPort": 3000,
+    }))
+}
+
+pub async fn proxy_ca_pem(State(state): State<AppState>) -> Response {
+    let cert_pem = state.ca_cert_pem.as_str();
+    (
+        StatusCode::OK,
+        [
+            (
+                axum::http::header::CONTENT_TYPE,
+                "application/x-pem-file",
+            ),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                "attachment; filename=\"mapy_ca.pem\"",
+            ),
+        ],
+        cert_pem.to_string(),
+    )
+        .into_response()
+}
+
+pub async fn proxy_ca_mobileconfig(State(state): State<AppState>) -> Response {
+    let cert_pem = state.ca_cert_pem.as_str();
+
+    // Extract the base64 content between BEGIN/END markers
+    let cert_der_b64 = cert_pem
+        .lines()
+        .filter(|l| !l.starts_with("-----"))
+        .collect::<Vec<_>>()
+        .join("");
+
+    let mobileconfig = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>PayloadContent</key>
+    <array>
+        <dict>
+            <key>PayloadCertificateFileName</key>
+            <string>mapy_ca.cer</string>
+            <key>PayloadContent</key>
+            <data>{cert_der_b64}</data>
+            <key>PayloadDescription</key>
+            <string>Adds a CA root certificate for Mapy HTTPS proxy</string>
+            <key>PayloadDisplayName</key>
+            <string>Mapy Proxy CA</string>
+            <key>PayloadIdentifier</key>
+            <string>com.mapy.proxy.ca</string>
+            <key>PayloadType</key>
+            <string>com.apple.security.root</string>
+            <key>PayloadUUID</key>
+            <string>A1B2C3D4-E5F6-7890-ABCD-EF1234567890</string>
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+        </dict>
+    </array>
+    <key>PayloadDisplayName</key>
+    <string>Mapy Proxy CA</string>
+    <key>PayloadIdentifier</key>
+    <string>com.mapy.proxy.profile</string>
+    <key>PayloadRemovalDisallowed</key>
+    <false/>
+    <key>PayloadType</key>
+    <string>Configuration</string>
+    <key>PayloadUUID</key>
+    <string>B2C3D4E5-F6A7-8901-BCDE-F12345678901</string>
+    <key>PayloadVersion</key>
+    <integer>1</integer>
+</dict>
+</plist>"#
+    );
+
+    (
+        StatusCode::OK,
+        [
+            (
+                axum::http::header::CONTENT_TYPE,
+                "application/x-apple-aspen-config",
+            ),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                "attachment; filename=\"mapy_ca.mobileconfig\"",
+            ),
+        ],
+        mobileconfig,
+    )
+        .into_response()
+}
+
+pub async fn proxy_install_simulator(State(state): State<AppState>) -> Response {
+    let cert_path = state.data_dir.join("mapy_ca_cert.pem");
+    let cert_path_str = cert_path.to_string_lossy().to_string();
+
+    let output = tokio::process::Command::new("xcrun")
+        .args(["simctl", "keychain", "booted", "add-root-cert", &cert_path_str])
+        .output()
+        .await;
+
+    match output {
+        Ok(result) => {
+            if result.status.success() {
+                Json(json!({ "ok": true, "message": "Certificate installed on booted simulator" }))
+                    .into_response()
+            } else {
+                let stderr = String::from_utf8_lossy(&result.stderr).to_string();
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "ok": false, "error": stderr })),
+                )
+                    .into_response()
+            }
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "ok": false, "error": format!("Failed to run xcrun: {e}") })),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn proxy_install_macos(State(state): State<AppState>) -> Response {
+    let cert_path = state.data_dir.join("mapy_ca_cert.pem");
+    let cert_path_str = cert_path.to_string_lossy().to_string();
+
+    let output = tokio::process::Command::new("security")
+        .args([
+            "add-trusted-cert",
+            "-d",
+            "-r",
+            "trustRoot",
+            "-k",
+            "/Library/Keychains/System.keychain",
+            &cert_path_str,
+        ])
+        .output()
+        .await;
+
+    match output {
+        Ok(result) => {
+            if result.status.success() {
+                Json(json!({ "ok": true, "message": "Certificate added to macOS System keychain" }))
+                    .into_response()
+            } else {
+                let stderr = String::from_utf8_lossy(&result.stderr).to_string();
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "ok": false, "error": stderr })),
+                )
+                    .into_response()
+            }
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "ok": false, "error": format!("Failed to run security: {e}") })),
+        )
+            .into_response(),
+    }
+}

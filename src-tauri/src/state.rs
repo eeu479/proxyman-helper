@@ -7,10 +7,12 @@ use tokio::sync::Mutex;
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub data_file: Arc<PathBuf>,
+    pub data_dir: Arc<PathBuf>,
     pub write_lock: Arc<Mutex<()>>,
     pub log_store: Arc<Mutex<LogStore>>,
     pub active_profile: Arc<Mutex<Option<String>>>,
     pub http_client: reqwest::Client,
+    pub ca_cert_pem: Arc<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]

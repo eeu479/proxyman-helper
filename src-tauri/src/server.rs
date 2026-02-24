@@ -1,3 +1,5 @@
+use crate::ca;
+use crate::forward_proxy;
 use crate::handlers;
 use crate::state::{AppState, LogStore};
 use crate::store;
@@ -17,12 +19,17 @@ pub async fn run_server(app_handle: tauri::AppHandle) -> Result<(), String> {
     let data_file = data_dir.join("profiles.json");
     store::ensure_data_file(&data_file).await?;
 
+    // Generate or load CA certificate
+    let ca_files = ca::ensure_ca(&data_dir).await?;
+
     let state = AppState {
         data_file: Arc::new(data_file),
+        data_dir: Arc::new(data_dir),
         write_lock: Arc::new(Mutex::new(())),
         log_store: Arc::new(Mutex::new(LogStore::default())),
         active_profile: Arc::new(Mutex::new(None)),
         http_client: reqwest::Client::new(),
+        ca_cert_pem: Arc::new(ca_files.cert_pem.clone()),
     };
     let store = store::read_store(&state).await;
     *state.active_profile.lock().await = store.active_profile.clone();
@@ -80,9 +87,35 @@ pub async fn run_server(app_handle: tauri::AppHandle) -> Result<(), String> {
         )
         .route("/api/logs", get(handlers::get_logs))
         .route("/api/request-counts", get(handlers::get_request_counts))
+        // Proxy management endpoints
+        .route("/api/proxy/status", get(handlers::proxy_status))
+        .route("/api/proxy/ca.pem", get(handlers::proxy_ca_pem))
+        .route(
+            "/api/proxy/ca.mobileconfig",
+            get(handlers::proxy_ca_mobileconfig),
+        )
+        .route(
+            "/api/proxy/install/simulator",
+            post(handlers::proxy_install_simulator),
+        )
+        .route(
+            "/api/proxy/install/macos",
+            post(handlers::proxy_install_macos),
+        )
         .route("/*path", any(handlers::proxy_handler))
-        .with_state(state)
+        .with_state(state.clone())
         .layer(cors);
+
+    // Spawn the forward HTTPS proxy
+    let proxy_state = state.clone();
+    let proxy_cert = ca_files.cert_pem;
+    let proxy_key = ca_files.key_pem;
+    tokio::spawn(async move {
+        if let Err(e) = forward_proxy::run_forward_proxy(proxy_state, proxy_cert, proxy_key).await
+        {
+            eprintln!("Forward proxy error: {e}");
+        }
+    });
 
     let port = std::env::var("MAPY_PORT")
         .ok()

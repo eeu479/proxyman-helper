@@ -1,4 +1,6 @@
 pub mod blocks;
+pub mod ca;
+pub mod forward_proxy;
 pub mod handlers;
 pub mod logs;
 pub mod matching;
