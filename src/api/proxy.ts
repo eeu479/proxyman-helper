@@ -35,3 +35,29 @@ export function getCertDownloadUrl(): string {
 export function getMobileconfigUrl(): string {
   return `${BASE_URL}/api/proxy/ca.mobileconfig`;
 }
+
+export type RecordingStatus = {
+  recording: boolean;
+};
+
+export async function startRecording(): Promise<RecordingStatus> {
+  const res = await fetch(`${BASE_URL}/api/proxy/recording/start`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error("Failed to start recording");
+  return res.json();
+}
+
+export async function stopRecording(): Promise<RecordingStatus> {
+  const res = await fetch(`${BASE_URL}/api/proxy/recording/stop`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error("Failed to stop recording");
+  return res.json();
+}
+
+export async function getRecordingStatus(): Promise<RecordingStatus> {
+  const res = await fetch(`${BASE_URL}/api/proxy/recording/status`);
+  if (!res.ok) throw new Error("Failed to fetch recording status");
+  return res.json();
+}

@@ -3,9 +3,11 @@ use crate::forward_proxy;
 use crate::handlers;
 use crate::state::{AppState, LogStore};
 use crate::store;
+use crate::system_proxy;
 use axum::http::Method;
 use axum::routing::{any, get, post, put};
 use axum::Router;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::Manager;
 use tokio::sync::Mutex;
@@ -30,6 +32,7 @@ pub async fn run_server(app_handle: tauri::AppHandle) -> Result<(), String> {
         active_profile: Arc::new(Mutex::new(None)),
         http_client: reqwest::Client::new(),
         ca_cert_pem: Arc::new(ca_files.cert_pem.clone()),
+        recording: Arc::new(AtomicBool::new(false)),
     };
     let store = store::read_store(&state).await;
     *state.active_profile.lock().await = store.active_profile.clone();
@@ -102,6 +105,18 @@ pub async fn run_server(app_handle: tauri::AppHandle) -> Result<(), String> {
             "/api/proxy/install/macos",
             post(handlers::proxy_install_macos),
         )
+        .route(
+            "/api/proxy/recording/start",
+            post(handlers::start_recording),
+        )
+        .route(
+            "/api/proxy/recording/stop",
+            post(handlers::stop_recording),
+        )
+        .route(
+            "/api/proxy/recording/status",
+            get(handlers::recording_status),
+        )
         .route("/*path", any(handlers::proxy_handler))
         .with_state(state.clone())
         .layer(cors);
@@ -126,7 +141,16 @@ pub async fn run_server(app_handle: tauri::AppHandle) -> Result<(), String> {
         .await
         .map_err(|error| error.to_string())?;
 
+    let recording_flag = state.recording.clone();
     axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal(recording_flag))
         .await
         .map_err(|error| error.to_string())
+}
+
+async fn shutdown_signal(recording: Arc<AtomicBool>) {
+    let _ = tokio::signal::ctrl_c().await;
+    if recording.load(Ordering::Relaxed) {
+        let _ = system_proxy::disable_system_proxy().await;
+    }
 }

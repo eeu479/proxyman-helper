@@ -13,6 +13,8 @@ export type RequestLogEntry = {
     headers?: Record<string, string>;
     body?: string | null;
   } | null;
+  sourceApp?: string | null;
+  host?: string | null;
 };
 
 const DEFAULT_API_BASE = "http://127.0.0.1:3000";

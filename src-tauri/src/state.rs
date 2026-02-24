@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -13,6 +14,7 @@ pub struct AppState {
     pub active_profile: Arc<Mutex<Option<String>>>,
     pub http_client: reqwest::Client,
     pub ca_cert_pem: Arc<String>,
+    pub recording: Arc<AtomicBool>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -28,6 +30,8 @@ pub struct RequestLogEntry {
     pub request: Option<String>,
     pub block: Option<String>,
     pub response: Option<LoggedResponse>,
+    pub source_app: Option<String>,
+    pub host: Option<String>,
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]

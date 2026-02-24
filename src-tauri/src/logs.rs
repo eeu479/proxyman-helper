@@ -12,6 +12,8 @@ pub async fn record_request(
     match_result: Option<&MatchResult>,
     block_match: Option<&BlockMatch>,
     response: Option<LoggedResponse>,
+    source_app: Option<String>,
+    host: Option<String>,
 ) {
     let timestamp_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -47,6 +49,8 @@ pub async fn record_request(
         request: request.clone(),
         block,
         response,
+        source_app,
+        host,
     };
 
     let mut log_store = state.log_store.lock().await;

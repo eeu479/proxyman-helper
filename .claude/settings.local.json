@@ -10,7 +10,9 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:crates.io)",
       "Bash(tail:*)",
-      "Bash(grep ^error:*)"
+      "Bash(grep ^error:*)",
+      "Bash(head:*)",
+      "Bash(cargo check:*)"
     ]
   }
 }

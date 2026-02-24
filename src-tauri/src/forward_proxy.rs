@@ -1,5 +1,6 @@
 use crate::logs;
 use crate::matching;
+use crate::process_lookup;
 use crate::response;
 use crate::state::AppState;
 use crate::store;
@@ -20,7 +21,7 @@ struct MapyProxyHandler {
 impl HttpHandler for MapyProxyHandler {
     async fn handle_request(
         &mut self,
-        _ctx: &HttpContext,
+        ctx: &HttpContext,
         req: Request<Body>,
     ) -> RequestOrResponse {
         let method_str = req.method().to_string();
@@ -30,6 +31,15 @@ impl HttpHandler for MapyProxyHandler {
             Ok(m) => m,
             Err(_) => return req.into(),
         };
+
+        let source_port = ctx.client_addr.port();
+        let source_app = process_lookup::lookup_process_name(source_port).await;
+        let host = req
+            .headers()
+            .get("host")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string())
+            .or_else(|| req.uri().host().map(|h| h.to_string()));
 
         let store = store::read_store(&self.state).await;
         let active_profile = self.state.active_profile.lock().await.clone();
@@ -49,6 +59,8 @@ impl HttpHandler for MapyProxyHandler {
                 None,
                 Some(found),
                 Some(logged_response),
+                source_app,
+                host,
             )
             .await;
 

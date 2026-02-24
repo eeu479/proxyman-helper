@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchRequestLogs, type RequestLogEntry } from "../../api/logs";
+import { getRecordingStatus, startRecording, stopRecording } from "../../api/proxy";
 
 const REFRESH_INTERVAL_MS = 1500;
 const METHOD_ORDER = ["GET", "POST", "PUT", "PATCH", "DELETE"];
@@ -43,6 +44,7 @@ function searchableText(entry: RequestLogEntry): string {
 const DebugPanel = ({ selectedProfile, onCreateBlockFromLog }: DebugPanelProps) => {
   const [logs, setLogs] = useState<RequestLogEntry[]>([]);
   const [isPaused, setIsPaused] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [methodFilter, setMethodFilter] = useState("");
@@ -50,6 +52,7 @@ const DebugPanel = ({ selectedProfile, onCreateBlockFromLog }: DebugPanelProps) 
   const [profileFilter, setProfileFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("time");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const apiBase = import.meta.env.VITE_MAPY_BASE_URL ?? DEFAULT_API_BASE;
 
   const profileScopedLogs = useMemo(() => {
@@ -73,8 +76,30 @@ const DebugPanel = ({ selectedProfile, onCreateBlockFromLog }: DebugPanelProps) 
     }
   };
 
+  const refreshRecordingStatus = async () => {
+    try {
+      const status = await getRecordingStatus();
+      setIsRecording(status.recording);
+    } catch {
+      // ignore
+    }
+  };
+
+  const toggleRecording = async () => {
+    try {
+      const result = isRecording
+        ? await stopRecording()
+        : await startRecording();
+      setIsRecording(result.recording);
+    } catch {
+      // refresh to get actual state
+      await refreshRecordingStatus();
+    }
+  };
+
   useEffect(() => {
     refreshLogs();
+    refreshRecordingStatus();
   }, []);
 
   useEffect(() => {
@@ -104,9 +129,27 @@ const DebugPanel = ({ selectedProfile, onCreateBlockFromLog }: DebugPanelProps) 
     return list;
   }, [profileScopedLogs]);
 
+  const sourceApps = useMemo(() => {
+    const counts = new Map<string, number>();
+    profileScopedLogs.forEach((e) => {
+      if (e.sourceApp) {
+        counts.set(e.sourceApp, (counts.get(e.sourceApp) ?? 0) + 1);
+      }
+    });
+    return Array.from(counts.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, count]) => ({ name, count }));
+  }, [profileScopedLogs]);
+
+  const hasSourceApps = sourceApps.length > 0;
+
   const filteredAndSortedRows = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     let result = [...profileScopedLogs];
+
+    if (selectedApp !== null) {
+      result = result.filter((e) => (e.sourceApp ?? null) === selectedApp);
+    }
 
     if (q) {
       result = result.filter((entry) => searchableText(entry).includes(q));
@@ -161,7 +204,8 @@ const DebugPanel = ({ selectedProfile, onCreateBlockFromLog }: DebugPanelProps) 
     searchQuery.trim() !== "" ||
     methodFilter !== "" ||
     matchedFilter !== "" ||
-    profileFilter !== "";
+    profileFilter !== "" ||
+    selectedApp !== null;
   const isEmpty = profileScopedLogs.length === 0;
   const hasNoResults = !isEmpty && filteredAndSortedRows.length === 0;
 
@@ -170,6 +214,7 @@ const DebugPanel = ({ selectedProfile, onCreateBlockFromLog }: DebugPanelProps) 
     setMethodFilter("");
     setMatchedFilter("");
     setProfileFilter("");
+    setSelectedApp(null);
     setSortKey("time");
     setSortDirection("desc");
   };
@@ -187,6 +232,13 @@ const DebugPanel = ({ selectedProfile, onCreateBlockFromLog }: DebugPanelProps) 
         </div>
         <div className="debug__actions">
           <button
+            className={`panel__action${isRecording ? " debug__record-btn--recording" : ""}`}
+            type="button"
+            onClick={toggleRecording}
+          >
+            {isRecording ? "Stop Recording" : "Start Recording"}
+          </button>
+          <button
             className="panel__action panel__action--ghost"
             type="button"
             onClick={() => setIsPaused((prev) => !prev)}
@@ -199,6 +251,32 @@ const DebugPanel = ({ selectedProfile, onCreateBlockFromLog }: DebugPanelProps) 
         </div>
       </header>
 
+      <div className={`debug__layout${hasSourceApps ? " debug__layout--with-sidebar" : ""}`}>
+      {hasSourceApps ? (
+        <aside className="debug__sidebar">
+          <button
+            type="button"
+            className={`debug__sidebar-item${selectedApp === null ? " debug__sidebar-item--active" : ""}`}
+            onClick={() => setSelectedApp(null)}
+          >
+            <span className="debug__sidebar-label">All</span>
+            <span className="debug__sidebar-count">{profileScopedLogs.length}</span>
+          </button>
+          {sourceApps.map(({ name, count }) => (
+            <button
+              key={name}
+              type="button"
+              className={`debug__sidebar-item${selectedApp === name ? " debug__sidebar-item--active" : ""}`}
+              onClick={() => setSelectedApp(name)}
+            >
+              <span className="debug__sidebar-label">{name}</span>
+              <span className="debug__sidebar-count">{count}</span>
+            </button>
+          ))}
+        </aside>
+      ) : null}
+
+      <div className="debug__main">
       {!isEmpty ? (
         <div className="debug__filters">
           <input
@@ -344,6 +422,8 @@ const DebugPanel = ({ selectedProfile, onCreateBlockFromLog }: DebugPanelProps) 
             </div>
           ))
         )}
+      </div>
+      </div>
       </div>
     </section>
   );

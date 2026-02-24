@@ -5,6 +5,7 @@ use crate::response;
 use crate::proxy;
 use crate::state::{AppState, RequestLogEntry, RequestMatchCount};
 use crate::store;
+use crate::system_proxy;
 use crate::types::{
     ActiveProfileResponse, AddLibraryInput, Block, BlocksPayload, CreateProfileInput,
     CreateRequestInput, CreateSubProfileInput, Library, Profile, SetActiveProfileInput,
@@ -804,6 +805,8 @@ pub async fn proxy_handler(
             None,
             Some(found),
             Some(logged_response),
+            None,
+            None,
         )
         .await;
         return response;
@@ -827,6 +830,8 @@ pub async fn proxy_handler(
                 Some(&found),
                 None,
                 Some(logged_response),
+                None,
+                None,
             )
             .await;
             response
@@ -850,6 +855,8 @@ pub async fn proxy_handler(
                 None,
                 None,
                 Some(logged_response),
+                None,
+                None,
             )
             .await;
             response
@@ -995,14 +1002,18 @@ pub async fn proxy_install_macos(State(state): State<AppState>) -> Response {
     let cert_path = state.data_dir.join("mapy_ca_cert.pem");
     let cert_path_str = cert_path.to_string_lossy().to_string();
 
+    let home = std::env::var("HOME").unwrap_or_default();
+    let login_keychain = format!("{home}/Library/Keychains/login.keychain-db");
+
     let output = tokio::process::Command::new("security")
         .args([
             "add-trusted-cert",
-            "-d",
             "-r",
             "trustRoot",
+            "-p",
+            "ssl",
             "-k",
-            "/Library/Keychains/System.keychain",
+            &login_keychain,
             &cert_path_str,
         ])
         .output()
@@ -1011,7 +1022,7 @@ pub async fn proxy_install_macos(State(state): State<AppState>) -> Response {
     match output {
         Ok(result) => {
             if result.status.success() {
-                Json(json!({ "ok": true, "message": "Certificate added to macOS System keychain" }))
+                Json(json!({ "ok": true, "message": "Certificate added to macOS login keychain" }))
                     .into_response()
             } else {
                 let stderr = String::from_utf8_lossy(&result.stderr).to_string();
@@ -1028,4 +1039,45 @@ pub async fn proxy_install_macos(State(state): State<AppState>) -> Response {
         )
             .into_response(),
     }
+}
+
+// --- Recording (system proxy toggle) handlers ---
+
+pub async fn start_recording(State(state): State<AppState>) -> Response {
+    match system_proxy::enable_system_proxy(9090).await {
+        Ok(()) => {
+            state
+                .recording
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+            Json(json!({ "ok": true, "recording": true })).into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "ok": false, "error": e })),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn stop_recording(State(state): State<AppState>) -> Response {
+    match system_proxy::disable_system_proxy().await {
+        Ok(()) => {
+            state
+                .recording
+                .store(false, std::sync::atomic::Ordering::Relaxed);
+            Json(json!({ "ok": true, "recording": false })).into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "ok": false, "error": e })),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn recording_status(State(state): State<AppState>) -> Json<Value> {
+    let recording = state
+        .recording
+        .load(std::sync::atomic::Ordering::Relaxed);
+    Json(json!({ "recording": recording }))
 }
