@@ -1,7 +1,7 @@
 {
-  "productName": "Local Proxy",
+  "productName": "Mapy",
   "version": "0.1.0",
-  "identifier": "com.localproxy.app",
+  "identifier": "com.mapy.app",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -14,7 +14,7 @@
     },
     "windows": [
       {
-        "title": "Local Proxy",
+        "title": "Mapy",
         "width": 1200,
         "height": 800,
         "devtools": true,

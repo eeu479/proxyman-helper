@@ -58,7 +58,7 @@ Run the app (frontend + Rust server):
 - `npm run tauri dev`
 
 The HTTP server listens on `127.0.0.1:3000` by default. To change it, set
-`LOCAL_PROXY_PORT` before launching the app.
+`MAPY_PORT` before launching the app.
 
 Profiles are stored in the OS app data directory as `profiles.json` and are
 seeded with the example profile on first launch.

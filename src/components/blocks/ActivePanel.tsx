@@ -11,6 +11,7 @@ type ActivePanelProps = {
   onDragEnd: () => void;
   onPointerDown: (blockId: string) => PointerEventHandler<HTMLDivElement>;
   onRemoveFromActive: (blockId: string) => void;
+  onEditBlock?: (blockId: string) => void;
   onClearActive: () => void;
   onSelectVariant: (blockId: string, variantId: string) => void;
   onSetBlockArrayItemEnabled?: (
@@ -30,6 +31,7 @@ const ActivePanel = ({
   onDragEnd,
   onPointerDown,
   onRemoveFromActive,
+  onEditBlock,
   onClearActive,
   onSelectVariant,
   onSetBlockArrayItemEnabled,
@@ -76,6 +78,9 @@ const ActivePanel = ({
                 onDragEnd={onDragEnd}
                 onPointerDown={onPointerDown(block.id)}
                 onRemoveFromActive={() => onRemoveFromActive(block.id)}
+                onEdit={
+                  onEditBlock ? () => onEditBlock(block.id) : undefined
+                }
                 onSelectVariant={(variantId) =>
                   onSelectVariant(block.id, variantId)
                 }

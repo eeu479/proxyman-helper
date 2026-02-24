@@ -11,7 +11,7 @@ fn main() {
             }
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(error) = local_proxy::run_server(app_handle).await {
+                if let Err(error) = mapy::run_server(app_handle).await {
                     eprintln!("Server error: {error}");
                 }
             });

@@ -1,7 +1,7 @@
 {
-  "name": "local-proxy",
+  "name": "mapy",
   "version": "0.1.0",
-  "description": "Local proxy desktop app",
+  "description": "Mapy desktop app",
   "type": "module",
   "scripts": {
     "dev": "vite",

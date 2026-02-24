@@ -84,7 +84,7 @@ pub async fn run_server(app_handle: tauri::AppHandle) -> Result<(), String> {
         .with_state(state)
         .layer(cors);
 
-    let port = std::env::var("LOCAL_PROXY_PORT")
+    let port = std::env::var("MAPY_PORT")
         .ok()
         .and_then(|value| value.parse::<u16>().ok())
         .unwrap_or(3000);

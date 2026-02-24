@@ -50,11 +50,15 @@ const DebugPanel = ({ selectedProfile, onCreateBlockFromLog }: DebugPanelProps) 
   const [profileFilter, setProfileFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("time");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const apiBase = import.meta.env.VITE_LOCAL_PROXY_BASE_URL ?? DEFAULT_API_BASE;
+  const apiBase = import.meta.env.VITE_MAPY_BASE_URL ?? DEFAULT_API_BASE;
 
   const profileScopedLogs = useMemo(() => {
     if (!selectedProfile.trim()) return logs;
-    return logs.filter((e) => (e.profile ?? "").trim() === selectedProfile.trim());
+    const profileTrim = selectedProfile.trim();
+    return logs.filter(
+      (e) =>
+        (e.profile ?? "").trim() === profileTrim || !e.matched
+    );
   }, [logs, selectedProfile]);
 
   const refreshLogs = async () => {

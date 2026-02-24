@@ -449,7 +449,14 @@ const useBlocks = ({
 
       const nextLibrary =
         destination === "active"
-          ? libraryBlocks.filter((item) => item.id !== blockId)
+          ? (() => {
+              const isFolderBlock =
+                (block.sourceLibraryId ?? "local") !== "local";
+              if (isFolderBlock) {
+                return libraryBlocks; // Keep in library so it stays in the folder
+              }
+              return libraryBlocks.filter((item) => item.id !== blockId);
+            })()
           : libraryBlocks.some((b) => b.id === blockId)
             ? libraryBlocks
             : [...libraryBlocks, block];
