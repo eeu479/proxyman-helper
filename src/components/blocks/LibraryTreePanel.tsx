@@ -65,8 +65,8 @@ type LibraryTreePanelProps = {
   blocks: Block[];
   categories: string[];
   libraries?: Library[];
-  onCreateBlock: () => void;
-  onCreateBlockInCategory?: (category: string) => void;
+  onCreateBlock: (libraryId?: string) => void;
+  onCreateBlockInCategory?: (category: string, libraryId?: string) => void;
   onImportBlocks?: (file: File) => Promise<void>;
   importBlocksMessage?: string | null;
   onDragOver: DragEventHandler<HTMLDivElement>;
@@ -119,6 +119,7 @@ export default function LibraryTreePanel({
 }: LibraryTreePanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const addMenuRef = useRef<HTMLDivElement>(null);
+  const [selectedLibraryId, setSelectedLibraryId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedFolders, setExpandedFolders] = useState<Set<string> | null>(
     null,
@@ -131,9 +132,15 @@ export default function LibraryTreePanel({
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null);
 
   const filteredBlocks = useMemo(() => {
+    let result = blocks;
+    if (selectedLibraryId) {
+      result = result.filter(
+        (block) => (block.sourceLibraryId ?? "local") === selectedLibraryId,
+      );
+    }
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return blocks;
-    return blocks.filter((block) => {
+    if (!q) return result;
+    return result.filter((block) => {
       const name = (block.name ?? "").toLowerCase();
       const method = (block.method ?? "").toLowerCase();
       const path = (block.path ?? "").toLowerCase();
@@ -149,7 +156,7 @@ export default function LibraryTreePanel({
         category.includes(q)
       );
     });
-  }, [blocks, searchQuery]);
+  }, [blocks, selectedLibraryId, searchQuery]);
 
   const grouped = useMemo(
     () => groupBlocksByCategory(filteredBlocks, categories),
@@ -336,7 +343,7 @@ export default function LibraryTreePanel({
                   role="menuitem"
                   onClick={() => {
                     setAddMenuOpen(false);
-                    onCreateBlock();
+                    onCreateBlock(selectedLibraryId || undefined);
                   }}
                 >
                   Create request
@@ -388,6 +395,21 @@ export default function LibraryTreePanel({
 
       {!isEmpty && (
         <div className="library-tree__toolbar">
+          {libraries.length > 0 ? (
+            <select
+              className="library-tree__select"
+              value={selectedLibraryId}
+              onChange={(e) => setSelectedLibraryId(e.target.value)}
+              aria-label="Library"
+            >
+              <option value="">All libraries</option>
+              {libraries.map((lib) => (
+                <option key={lib.id} value={lib.id}>
+                  {lib.name}
+                </option>
+              ))}
+            </select>
+          ) : null}
           <input
             type="search"
             className="library-tree__search"
@@ -517,6 +539,7 @@ export default function LibraryTreePanel({
                                   e.stopPropagation();
                                   onCreateBlockInCategory(
                                     category === UNCATEGORIZED ? "" : category,
+                                    selectedLibraryId || undefined,
                                   );
                                 }}
                                 aria-label={`Add block in ${category}`}

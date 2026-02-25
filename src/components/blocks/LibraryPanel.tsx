@@ -61,7 +61,7 @@ type LibraryPanelProps = {
   blocks: Block[];
   categories: string[];
   libraries?: Library[];
-  onCreateBlock: () => void;
+  onCreateBlock: (libraryId?: string) => void;
   onImportBlocks?: (file: File) => Promise<void>;
   importBlocksMessage?: string | null;
   onDragOver: DragEventHandler<HTMLDivElement>;
@@ -110,11 +110,19 @@ const LibraryPanel = ({
   onMoveBlockToCategory,
 }: LibraryPanelProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedLibraryId, setSelectedLibraryId] = useState("");
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [editingCategoryName, setEditingCategoryName] = useState("");
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null);
+
+  const filteredBlocks = useMemo(() => {
+    if (!selectedLibraryId) return blocks;
+    return blocks.filter(
+      (block) => (block.sourceLibraryId ?? "local") === selectedLibraryId,
+    );
+  }, [blocks, selectedLibraryId]);
 
   const handleCategoryDragOver = (category: string) => (e: ReactDragEvent) => {
     e.preventDefault();
@@ -185,8 +193,8 @@ const LibraryPanel = ({
   };
 
   const grouped = useMemo(
-    () => groupBlocksByCategory(blocks, categories),
-    [blocks, categories],
+    () => groupBlocksByCategory(filteredBlocks, categories),
+    [filteredBlocks, categories],
   );
 
   return (
@@ -196,7 +204,22 @@ const LibraryPanel = ({
           <h2>Library</h2>
           <span className="panel__hint">Drag a block to activate it.</span>
         </div>
-        <div className="panel__header-actions">
+        <div className="panel__header-actions panel__header-actions--wrap">
+          {libraries.length > 0 ? (
+            <select
+              className="panel__select"
+              value={selectedLibraryId}
+              onChange={(e) => setSelectedLibraryId(e.target.value)}
+              aria-label="Library"
+            >
+              <option value="">All libraries</option>
+              {libraries.map((lib) => (
+                <option key={lib.id} value={lib.id}>
+                  {lib.name}
+                </option>
+              ))}
+            </select>
+          ) : null}
           {onImportBlocks ? (
             <>
               <button
@@ -230,7 +253,7 @@ const LibraryPanel = ({
           <button
             className="panel__action"
             type="button"
-            onClick={onCreateBlock}
+            onClick={() => onCreateBlock(selectedLibraryId || undefined)}
           >
             New Block
           </button>
@@ -256,7 +279,7 @@ const LibraryPanel = ({
         onDragEnter={onDragEnter}
         onDrop={onDrop}
       >
-        {blocks.length === 0 && categories.length === 0 && !isAddingCategory ? (
+        {filteredBlocks.length === 0 && categories.length === 0 && !isAddingCategory ? (
           <div className="panel__empty">All blocks active.</div>
         ) : (
           <>

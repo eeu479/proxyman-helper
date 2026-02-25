@@ -214,7 +214,7 @@ const App = () => {
     const a = document.createElement("a");
     a.href = url;
     const date = new Date().toISOString().slice(0, 10);
-    a.download = `local-proxy-library-${selectedProfile}-${date}.json`;
+    a.download = `mapy-library-${selectedProfile}-${date}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }, [selectedProfile, libraryBlocks]);
@@ -227,7 +227,7 @@ const App = () => {
     const a = document.createElement("a");
     a.href = url;
     const sanitized = block.name.replace(/[^a-zA-Z0-9-_]/g, "-");
-    a.download = `local-proxy-block-${sanitized}.json`;
+    a.download = `mapy-block-${sanitized}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }, []);
@@ -315,7 +315,10 @@ const App = () => {
         className={`main ${activeView === "builder" ? (builderLayout === "tree" ? "main--builder" : "") : "main--single"}`}
       >
         {activeView === "debug" ? (
-          <DebugPanel onCreateBlockFromLog={openBuilderFromLog} />
+          <DebugPanel
+            selectedProfile={selectedProfile}
+            onCreateBlockFromLog={openBuilderFromLog}
+          />
         ) : activeView === "library" ? (
           <LibraryExplorerPanel
             profileName={selectedProfile ?? null}
@@ -386,10 +389,10 @@ const App = () => {
               blocks={libraryBlocks}
               categories={categories}
               libraries={libraries}
-              onCreateBlock={() => setIsBuilderOpen(true)}
-              onCreateBlockInCategory={(category) => {
+              onCreateBlock={(libraryId) => setIsBuilderOpen(true, libraryId)}
+              onCreateBlockInCategory={(category, libraryId) => {
                 setBuilderCategory(category);
-                setIsBuilderOpen(true);
+                setIsBuilderOpen(true, libraryId);
               }}
               onImportBlocks={handleImportBlocks}
               importBlocksMessage={importBlocksMessage}
@@ -415,11 +418,11 @@ const App = () => {
               onDragOver={allowDrop}
               onDragEnter={handleDragEnter}
               onDropActive={handleDrop("active")}
-              onDropLibrary={handleDrop("library")}
               onDragStart={(blockId) => handleDragStart(blockId, "active")}
               onDragEnd={handleDragEnd}
               onPointerDown={(blockId) => handlePointerDown(blockId, "active")}
               onRemoveFromActive={removeBlockFromActive}
+              onEditBlock={editBlock}
               onClearActive={clearActiveBlocks}
               onSelectVariant={setBlockActiveVariant}
               onSetBlockArrayItemEnabled={setBlockArrayItemEnabled}
@@ -431,7 +434,7 @@ const App = () => {
               blocks={libraryBlocks}
               categories={categories}
               libraries={libraries}
-              onCreateBlock={() => setIsBuilderOpen(true)}
+              onCreateBlock={(libraryId) => setIsBuilderOpen(true, libraryId)}
               onImportBlocks={handleImportBlocks}
               importBlocksMessage={importBlocksMessage}
               onDragOver={allowDrop}
@@ -455,11 +458,11 @@ const App = () => {
               onDragOver={allowDrop}
               onDragEnter={handleDragEnter}
               onDropActive={handleDrop("active")}
-              onDropLibrary={handleDrop("library")}
               onDragStart={(blockId) => handleDragStart(blockId, "active")}
               onDragEnd={handleDragEnd}
               onPointerDown={(blockId) => handlePointerDown(blockId, "active")}
               onRemoveFromActive={removeBlockFromActive}
+              onEditBlock={editBlock}
               onClearActive={clearActiveBlocks}
               onSelectVariant={setBlockActiveVariant}
               onSetBlockArrayItemEnabled={setBlockArrayItemEnabled}

@@ -7,11 +7,11 @@ type ActivePanelProps = {
   onDragOver: DragEventHandler<HTMLDivElement>;
   onDragEnter: DragEventHandler<HTMLDivElement>;
   onDropActive: DragEventHandler<HTMLDivElement>;
-  onDropLibrary: DragEventHandler<HTMLDivElement>;
   onDragStart: (blockId: string) => DragEventHandler<HTMLDivElement>;
   onDragEnd: () => void;
   onPointerDown: (blockId: string) => PointerEventHandler<HTMLDivElement>;
   onRemoveFromActive: (blockId: string) => void;
+  onEditBlock?: (blockId: string) => void;
   onClearActive: () => void;
   onSelectVariant: (blockId: string, variantId: string) => void;
   onSetBlockArrayItemEnabled?: (
@@ -27,11 +27,11 @@ const ActivePanel = ({
   onDragOver,
   onDragEnter,
   onDropActive,
-  onDropLibrary,
   onDragStart,
   onDragEnd,
   onPointerDown,
   onRemoveFromActive,
+  onEditBlock,
   onClearActive,
   onSelectVariant,
   onSetBlockArrayItemEnabled,
@@ -78,6 +78,9 @@ const ActivePanel = ({
                 onDragEnd={onDragEnd}
                 onPointerDown={onPointerDown(block.id)}
                 onRemoveFromActive={() => onRemoveFromActive(block.id)}
+                onEdit={
+                  onEditBlock ? () => onEditBlock(block.id) : undefined
+                }
                 onSelectVariant={(variantId) =>
                   onSelectVariant(block.id, variantId)
                 }
@@ -86,15 +89,6 @@ const ActivePanel = ({
             ))}
           </div>
         )}
-      </div>
-      <div
-        className="panel__footer"
-        data-drop-zone="library"
-        onDragOver={onDragOver}
-        onDragEnter={onDragEnter}
-        onDrop={onDropLibrary}
-      >
-        Drag here to remove from active.
       </div>
     </section>
   );

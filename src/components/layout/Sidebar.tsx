@@ -148,8 +148,8 @@ const Sidebar = ({
             className={`sidebar__nav-button ${activeView === "builder" ? "is-active" : ""}`}
             type="button"
             onClick={() => onChangeView("builder")}
-            title="Builder"
-            aria-label="Builder"
+            title="Mocks"
+            aria-label="Mocks"
           >
             {minimized ? (
               <svg
@@ -169,7 +169,7 @@ const Sidebar = ({
                 <rect x="14" y="14" width="7" height="7" rx="1" />
               </svg>
             ) : (
-              "Builder"
+              "Mocks"
             )}
           </button>
           <button
@@ -201,8 +201,8 @@ const Sidebar = ({
             className={`sidebar__nav-button ${activeView === "debug" ? "is-active" : ""}`}
             type="button"
             onClick={() => onChangeView("debug")}
-            title="Debug"
-            aria-label="Debug"
+            title="Request Feed"
+            aria-label="Request Feed"
           >
             {minimized ? (
               <svg
@@ -216,18 +216,15 @@ const Sidebar = ({
                 strokeLinejoin="round"
                 aria-hidden
               >
-                <path d="m8 2 1 1" />
-                <path d="m16 2-1 1" />
-                <path d="M12 3v2" />
-                <path d="M18 8a6 6 0 0 0-12 0" />
-                <path d="M4.93 18.68 6.34 17.26" />
-                <path d="M19.07 18.68 17.66 17.26" />
-                <path d="M6 22l2-4 2 4" />
-                <path d="M16 22l-2-4 2 4" />
-                <path d="M10 22h4" />
+                <line x1="8" y1="6" x2="21" y2="6" />
+                <line x1="8" y1="12" x2="21" y2="12" />
+                <line x1="8" y1="18" x2="21" y2="18" />
+                <line x1="3" y1="6" x2="3.01" y2="6" />
+                <line x1="3" y1="12" x2="3.01" y2="12" />
+                <line x1="3" y1="18" x2="3.01" y2="18" />
               </svg>
             ) : (
-              "Debug"
+              "Request Feed"
             )}
           </button>
           <button

@@ -1,7 +1,7 @@
 import type { Block } from "../types/block";
 
 const DEFAULT_API_BASE = "http://127.0.0.1:3000";
-const API_BASE = import.meta.env.VITE_LOCAL_PROXY_BASE_URL ?? DEFAULT_API_BASE;
+const API_BASE = import.meta.env.VITE_MAPY_BASE_URL ?? DEFAULT_API_BASE;
 
 type ApiError = {
   error?: string;

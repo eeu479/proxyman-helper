@@ -192,13 +192,17 @@ const BlockBuilderModal = ({
   };
 
   const formatJsonTemplate = () => {
-    const trimmed = builderResponseTemplate.trim();
+    const normalized = normalizeStraightQuotes(builderResponseTemplate);
+    const trimmed = normalized.trim();
     if (!trimmed) return;
     try {
       const parsed = JSON.parse(trimmed);
       onChangeResponseTemplate(JSON.stringify(parsed, null, 2));
     } catch {
-      // Leave as-is when it is not valid JSON.
+      // Leave as-is when not valid JSON; still apply quote normalization
+      if (normalized !== builderResponseTemplate) {
+        onChangeResponseTemplate(normalized);
+      }
     }
   };
 
@@ -368,11 +372,7 @@ const BlockBuilderModal = ({
             <textarea
               className="modal__input modal__textarea"
               value={builderResponseTemplate}
-              onChange={(event) =>
-                onChangeResponseTemplate(
-                  normalizeStraightQuotes(event.target.value),
-                )
-              }
+              onChange={(event) => onChangeResponseTemplate(event.target.value)}
               onBlur={formatJsonTemplate}
               onKeyDown={handleTemplateKeyDown}
               placeholder='e.g. { "status": "ok", "userId": "{{userId}}" }'

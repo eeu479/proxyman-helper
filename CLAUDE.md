@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Local Proxy is a Tauri v2 desktop app that acts as a configurable mock HTTP server. It intercepts requests at a wildcard route, matches them against user-defined "blocks" (response templates), and returns templated responses with variable substitution. The UI lets users manage profiles, subprofiles, and drag-and-drop blocks between a library and an active set.
+Mapy is a Tauri v2 desktop app that acts as a configurable mock HTTP server. It intercepts requests at a wildcard route, matches them against user-defined "blocks" (response templates), and returns templated responses with variable substitution. The UI lets users manage profiles, subprofiles, and drag-and-drop blocks between a library and an active set.
 
 ## Commands
 
@@ -21,7 +21,7 @@ There are no test or lint commands configured.
 **Frontend (React 19 + TypeScript + Vite):**
 - `src/App.tsx` — Root component, owns all top-level state, renders view based on `activeView` ("builder" | "debug" | "settings" | "library")
 - `src/hooks/` — Three custom hooks (`useBlocks`, `useProfiles`, `useSubprofiles`) that encapsulate all state management. No external state library; state is lifted to App and passed via props
-- `src/api/` — Thin fetch wrappers (`profiles.ts`, `blocks.ts`, `libraries.ts`, `logs.ts`) that talk to the Rust backend. Base URL configurable via `VITE_LOCAL_PROXY_BASE_URL`, defaults to `http://127.0.0.1:3000`
+- `src/api/` — Thin fetch wrappers (`profiles.ts`, `blocks.ts`, `libraries.ts`, `logs.ts`) that talk to the Rust backend. Base URL configurable via `VITE_MAPY_BASE_URL`, defaults to `http://127.0.0.1:3000`
 - `src/components/` — Organized by feature: `blocks/`, `modals/`, `settings/`, `debug/`, `layout/`
 - `src/types/` — TypeScript type definitions for `Block` and `Profile`
 - No client-side router; view switching is state-driven via sidebar
