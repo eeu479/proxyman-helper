@@ -1001,41 +1001,108 @@ pub async fn proxy_install_simulator(State(state): State<AppState>) -> Response 
 pub async fn proxy_install_macos(State(state): State<AppState>) -> Response {
     let cert_path = state.data_dir.join("mapy_ca_cert.pem");
     let cert_path_str = cert_path.to_string_lossy().to_string();
-
     let home = std::env::var("HOME").unwrap_or_default();
     let login_keychain = format!("{home}/Library/Keychains/login.keychain-db");
 
-    let output = tokio::process::Command::new("security")
-        .args([
-            "add-trusted-cert",
-            "-r",
-            "trustRoot",
-            "-p",
-            "ssl",
-            "-k",
-            &login_keychain,
-            &cert_path_str,
-        ])
+    let escaped_cert_path = cert_path_str.replace('\'', "'\"'\"'");
+    let shell_script = format!(
+        "security delete-certificate -c 'Mapy Proxy CA' \"$HOME/Library/Keychains/login.keychain-db\" >/dev/null 2>&1 || true; \
+         security delete-certificate -c 'Mapy Proxy CA' /Library/Keychains/System.keychain >/dev/null 2>&1 || true; \
+         security add-trusted-cert -d -r trustRoot -p ssl -k /Library/Keychains/System.keychain '{escaped_cert_path}'"
+    );
+    let applescript = format!(
+        "do shell script \"{}\" with administrator privileges",
+        shell_script.replace('\\', "\\\\").replace('"', "\\\"")
+    );
+
+    let output = tokio::process::Command::new("osascript")
+        .args(["-e", &applescript])
         .output()
         .await;
 
     match output {
         Ok(result) => {
             if result.status.success() {
-                Json(json!({ "ok": true, "message": "Certificate added to macOS login keychain" }))
-                    .into_response()
+                Json(json!({
+                    "ok": true,
+                    "message": "Certificate trusted in macOS System keychain"
+                }))
+                .into_response()
             } else {
                 let stderr = String::from_utf8_lossy(&result.stderr).to_string();
+                let lower = stderr.to_lowercase();
+                let cannot_prompt = lower.contains("no user interaction was possible")
+                    || lower.contains("authorization was denied");
+
+                if cannot_prompt {
+                    let _ = tokio::process::Command::new("security")
+                        .args(["delete-certificate", "-c", "Mapy Proxy CA", &login_keychain])
+                        .output()
+                        .await;
+                    let login_output = tokio::process::Command::new("security")
+                        .args([
+                            "add-trusted-cert",
+                            "-r",
+                            "trustRoot",
+                            "-p",
+                            "ssl",
+                            "-k",
+                            &login_keychain,
+                            &cert_path_str,
+                        ])
+                        .output()
+                        .await;
+
+                    match login_output {
+                        Ok(login_result) if login_result.status.success() => {
+                            return Json(json!({
+                                "ok": true,
+                                "message": "Certificate trusted in login keychain (system-keychain prompt unavailable in current context)"
+                            }))
+                            .into_response();
+                        }
+                        Ok(login_result) => {
+                            let login_stderr =
+                                String::from_utf8_lossy(&login_result.stderr).to_string();
+                            let error_text = if login_stderr.trim().is_empty() {
+                                "Certificate trust was canceled or failed".to_string()
+                            } else {
+                                login_stderr
+                            };
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(json!({ "ok": false, "error": error_text })),
+                            )
+                                .into_response();
+                        }
+                        Err(e) => {
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(json!({
+                                    "ok": false,
+                                    "error": format!("Failed to install login keychain certificate: {e}")
+                                })),
+                            )
+                                .into_response();
+                        }
+                    }
+                }
+
+                let error_text = if stderr.trim().is_empty() {
+                    "Certificate trust was canceled or failed".to_string()
+                } else {
+                    stderr
+                };
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "ok": false, "error": stderr })),
+                    Json(json!({ "ok": false, "error": error_text })),
                 )
                     .into_response()
             }
         }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "ok": false, "error": format!("Failed to run security: {e}") })),
+            Json(json!({ "ok": false, "error": format!("Failed to run osascript: {e}") })),
         )
             .into_response(),
     }

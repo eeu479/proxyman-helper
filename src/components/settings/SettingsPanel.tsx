@@ -24,6 +24,8 @@ type SectionId =
   | "blocks"
   | "danger";
 
+type ProxyAction = "simulator" | "macos";
+
 type SettingsPanelProps = {
   profiles: Profile[];
   selectedProfile: string;
@@ -137,9 +139,12 @@ const SettingsPanel = ({
 
   // Proxy state
   const [proxyStatus, setProxyStatus] = useState<ProxyStatus | null>(null);
-  const [proxyLoading, setProxyLoading] = useState(false);
-  const [proxyMessage, setProxyMessage] = useState<string | null>(null);
-  const [proxyExpanded, setProxyExpanded] = useState<string | null>(null);
+  const [proxyLoading, setProxyLoading] = useState<ProxyAction | null>(null);
+  const [proxyMessage, setProxyMessage] = useState<{
+    tone: "error" | "success";
+    text: string;
+  } | null>(null);
+  const [proxyExpanded, setProxyExpanded] = useState<"ios" | "android" | "general">("ios");
 
   const fetchProxy = useCallback(async () => {
     try {
@@ -155,6 +160,44 @@ const SettingsPanel = ({
       fetchProxy();
     }
   }, [activeSection, fetchProxy]);
+
+  const runProxyInstall = useCallback(
+    async (
+      action: ProxyAction,
+      fn: () => Promise<{ ok: boolean; message?: string; error?: string }>,
+      fallback: string,
+    ) => {
+      setProxyLoading(action);
+      setProxyMessage(null);
+      try {
+        const res = await fn();
+        setProxyMessage({
+          tone: res.ok ? "success" : "error",
+          text: res.ok ? (res.message ?? fallback) : `Error: ${res.error ?? "Install failed"}`,
+        });
+      } catch (e) {
+        setProxyMessage({
+          tone: "error",
+          text: e instanceof Error ? e.message : "Install failed",
+        });
+      } finally {
+        setProxyLoading(null);
+      }
+    },
+    [],
+  );
+
+  const copyProxyValue = useCallback(async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setProxyMessage({ tone: "success", text: `${label} copied` });
+    } catch {
+      setProxyMessage({
+        tone: "error",
+        text: "Unable to copy to clipboard",
+      });
+    }
+  }, []);
 
   const handleImportClick = () => {
     fileInputRef.current?.click();
@@ -238,232 +281,238 @@ const SettingsPanel = ({
 
           {activeSection === "proxy" && (
             <div className="settings__proxy">
-              <div className="settings__section">
-                <span className="settings__label">HTTPS Proxy</span>
-                {proxyStatus ? (
-                  <div className="settings__proxy-status">
-                    <div className="settings__proxy-status-row">
-                      <span className="settings__proxy-status-dot settings__proxy-status-dot--active" />
-                      <span>Running on port {proxyStatus.port}</span>
+              <div className="settings__proxy-grid">
+                <div className="settings__proxy-card">
+                  <span className="settings__label">HTTPS Proxy</span>
+                  {proxyStatus ? (
+                    <div className="settings__proxy-status">
+                      <div className="settings__proxy-status-row">
+                        <span className="settings__proxy-status-dot settings__proxy-status-dot--active" />
+                        <span>
+                          Running on{" "}
+                          <code className="settings__code">
+                            {proxyStatus.localIp}:{proxyStatus.port}
+                          </code>
+                        </span>
+                      </div>
+                      <div className="settings__proxy-status-row">
+                        <span className="settings__text-muted">API:</span>
+                        <code className="settings__code">
+                          {proxyStatus.localIp}:{proxyStatus.apiPort}
+                        </code>
+                      </div>
                     </div>
-                    <div className="settings__proxy-status-row">
-                      <span className="settings__text-muted">Local IP:</span>
-                      <code className="settings__code">{proxyStatus.localIp}</code>
+                  ) : (
+                    <p className="settings__blocks-hint">
+                      Unable to fetch proxy status.
+                    </p>
+                  )}
+                  {proxyStatus ? (
+                    <div className="settings__proxy-actions">
+                      <button
+                        className="settings__button settings__button--edit"
+                        type="button"
+                        onClick={() =>
+                          copyProxyValue(
+                            `${proxyStatus.localIp}:${proxyStatus.port}`,
+                            "Proxy endpoint",
+                          )
+                        }
+                      >
+                        Copy Proxy Endpoint
+                      </button>
+                      <button
+                        className="settings__button settings__button--edit"
+                        type="button"
+                        onClick={() =>
+                          copyProxyValue(
+                            `http://${proxyStatus.localIp}:${proxyStatus.apiPort}/api/proxy/ca.pem`,
+                            "Local certificate URL",
+                          )
+                        }
+                      >
+                        Copy Local Cert URL
+                      </button>
                     </div>
-                  </div>
-                ) : (
-                  <p className="settings__blocks-hint">
-                    Unable to fetch proxy status.
-                  </p>
-                )}
-              </div>
-
-              <div className="settings__section">
-                <span className="settings__label">Certificate</span>
-                <p className="settings__blocks-hint">
-                  Devices must trust the Mapy CA certificate to allow HTTPS
-                  interception.
-                </p>
-                <div className="settings__proxy-actions">
-                  <a
-                    className="settings__button settings__button--edit"
-                    href={getCertDownloadUrl()}
-                    download="mapy_ca.pem"
-                  >
-                    Download CA Certificate
-                  </a>
-                  <button
-                    className="settings__button settings__button--edit"
-                    type="button"
-                    disabled={proxyLoading}
-                    onClick={async () => {
-                      setProxyLoading(true);
-                      setProxyMessage(null);
-                      try {
-                        const res = await installCertSimulator();
-                        setProxyMessage(
-                          res.ok
-                            ? res.message ?? "Installed"
-                            : `Error: ${res.error}`,
-                        );
-                      } catch (e) {
-                        setProxyMessage(
-                          e instanceof Error ? e.message : "Install failed",
-                        );
-                      } finally {
-                        setProxyLoading(false);
-                      }
-                    }}
-                  >
-                    {proxyLoading
-                      ? "Installing..."
-                      : "Install on iOS Simulator"}
-                  </button>
-                  <button
-                    className="settings__button settings__button--edit"
-                    type="button"
-                    disabled={proxyLoading}
-                    onClick={async () => {
-                      setProxyLoading(true);
-                      setProxyMessage(null);
-                      try {
-                        const res = await installCertMacOS();
-                        setProxyMessage(
-                          res.ok
-                            ? res.message ?? "Installed"
-                            : `Error: ${res.error}`,
-                        );
-                      } catch (e) {
-                        setProxyMessage(
-                          e instanceof Error ? e.message : "Install failed",
-                        );
-                      } finally {
-                        setProxyLoading(false);
-                      }
-                    }}
-                  >
-                    Install on macOS
-                  </button>
+                  ) : null}
                 </div>
-                {proxyMessage ? (
-                  <div
-                    className={
-                      proxyMessage.startsWith("Error")
-                        ? "settings__error"
-                        : "settings__success"
-                    }
-                  >
-                    {proxyMessage}
+
+                <div className="settings__proxy-card">
+                  <span className="settings__label">Certificate Assets</span>
+                  <p className="settings__blocks-hint">
+                    Download and distribute certificate files used for HTTPS interception.
+                  </p>
+                  <div className="settings__proxy-actions">
+                    <a
+                      className="settings__button settings__button--edit"
+                      href={getCertDownloadUrl()}
+                      download="mapy_ca.pem"
+                    >
+                      Download CA Certificate
+                    </a>
+                    <a
+                      className="settings__button settings__button--edit"
+                      href={getMobileconfigUrl()}
+                      download="mapy_ca.mobileconfig"
+                    >
+                      Download iOS Profile
+                    </a>
                   </div>
-                ) : null}
+                </div>
+
+                <div className="settings__proxy-card">
+                  <span className="settings__label">Quick Install</span>
+                  <p className="settings__blocks-hint">
+                    Automated install actions for local development targets.
+                  </p>
+                  <div className="settings__proxy-actions">
+                    <button
+                      className="settings__button settings__button--edit"
+                      type="button"
+                      disabled={proxyLoading !== null}
+                      onClick={() =>
+                        runProxyInstall(
+                          "simulator",
+                          installCertSimulator,
+                          "Certificate installed on iOS Simulator",
+                        )
+                      }
+                    >
+                      {proxyLoading === "simulator"
+                        ? "Installing on Simulator..."
+                        : "Install on iOS Simulator"}
+                    </button>
+                    <button
+                      className="settings__button settings__button--edit"
+                      type="button"
+                      disabled={proxyLoading !== null}
+                      onClick={() =>
+                        runProxyInstall(
+                          "macos",
+                          installCertMacOS,
+                          "Certificate installed on macOS keychain",
+                        )
+                      }
+                    >
+                      {proxyLoading === "macos"
+                        ? "Installing on macOS..."
+                        : "Install on macOS"}
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              <div className="settings__section">
-                <span className="settings__label">Device Setup</span>
-
-                <button
-                  type="button"
-                  className="settings__proxy-expand-btn"
-                  onClick={() =>
-                    setProxyExpanded(
-                      proxyExpanded === "ios" ? null : "ios",
-                    )
+              {proxyMessage ? (
+                <div
+                  className={
+                    proxyMessage.tone === "error"
+                      ? "settings__error"
+                      : "settings__success"
                   }
                 >
-                  iOS Physical Device
-                  <span className="settings__proxy-chevron">
-                    {proxyExpanded === "ios" ? "\u25B2" : "\u25BC"}
-                  </span>
-                </button>
-                {proxyExpanded === "ios" && proxyStatus && (
+                  {proxyMessage.text}
+                </div>
+              ) : null}
+
+              <div className="settings__section">
+                <span className="settings__label">Device Setup Guides</span>
+                <div className="settings__proxy-guides-nav">
+                  <button
+                    type="button"
+                    className={`settings__proxy-guide-tab ${proxyExpanded === "ios" ? "settings__proxy-guide-tab--active" : ""}`}
+                    onClick={() => setProxyExpanded("ios")}
+                  >
+                    iOS Device
+                  </button>
+                  <button
+                    type="button"
+                    className={`settings__proxy-guide-tab ${proxyExpanded === "android" ? "settings__proxy-guide-tab--active" : ""}`}
+                    onClick={() => setProxyExpanded("android")}
+                  >
+                    Android Emulator
+                  </button>
+                  <button
+                    type="button"
+                    className={`settings__proxy-guide-tab ${proxyExpanded === "general" ? "settings__proxy-guide-tab--active" : ""}`}
+                    onClick={() => setProxyExpanded("general")}
+                  >
+                    General
+                  </button>
+                </div>
+
+                {proxyExpanded === "ios" && proxyStatus ? (
                   <div className="settings__proxy-instructions">
                     <ol>
                       <li>
-                        On your iOS device, open Safari and go to:{" "}
+                        Download and install profile:
                         <code className="settings__code">
                           http://{proxyStatus.localIp}:{proxyStatus.apiPort}
                           /api/proxy/ca.mobileconfig
                         </code>
                       </li>
                       <li>
-                        Install the profile in Settings {">"} General {">"}{" "}
-                        VPN & Device Management.
+                        Install in Settings {">"} General {">"} VPN & Device Management.
                       </li>
                       <li>
-                        Enable full trust: Settings {">"} General {">"} About{" "}
-                        {">"} Certificate Trust Settings {">"} toggle on
-                        "Mapy Proxy CA".
+                        Enable full trust in Settings {">"} General {">"} About {">"} Certificate Trust Settings.
                       </li>
                       <li>
-                        Set Wi-Fi proxy to Manual:{" "}
-                        <code className="settings__code">
-                          {proxyStatus.localIp}
-                        </code>{" "}
-                        port{" "}
-                        <code className="settings__code">
-                          {proxyStatus.port}
-                        </code>
-                      </li>
-                    </ol>
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  className="settings__proxy-expand-btn"
-                  onClick={() =>
-                    setProxyExpanded(
-                      proxyExpanded === "android" ? null : "android",
-                    )
-                  }
-                >
-                  Android Emulator
-                  <span className="settings__proxy-chevron">
-                    {proxyExpanded === "android" ? "\u25B2" : "\u25BC"}
-                  </span>
-                </button>
-                {proxyExpanded === "android" && proxyStatus && (
-                  <div className="settings__proxy-instructions">
-                    <ol>
-                      <li>
-                        Download the CA certificate from{" "}
-                        <code className="settings__code">
-                          http://{proxyStatus.localIp}:{proxyStatus.apiPort}
-                          /api/proxy/ca.pem
-                        </code>
-                      </li>
-                      <li>
-                        Push via adb:{" "}
-                        <code className="settings__code">
-                          adb push mapy_ca.pem /sdcard/
-                        </code>
-                      </li>
-                      <li>
-                        Install: Settings {">"} Security {">"} Install from
-                        storage.
-                      </li>
-                      <li>
-                        Set proxy:{" "}
+                        Set Wi-Fi proxy to Manual:
                         <code className="settings__code">
                           {proxyStatus.localIp}:{proxyStatus.port}
                         </code>
                       </li>
                     </ol>
                   </div>
-                )}
-
-                <button
-                  type="button"
-                  className="settings__proxy-expand-btn"
-                  onClick={() =>
-                    setProxyExpanded(
-                      proxyExpanded === "general" ? null : "general",
-                    )
-                  }
-                >
-                  General
-                  <span className="settings__proxy-chevron">
-                    {proxyExpanded === "general" ? "\u25B2" : "\u25BC"}
-                  </span>
-                </button>
-                {proxyExpanded === "general" && proxyStatus && (
+                ) : null}
+                {proxyExpanded === "android" && proxyStatus ? (
                   <div className="settings__proxy-instructions">
-                    <p>
-                      Configure your device or browser's HTTP proxy to point
-                      to{" "}
-                      <code className="settings__code">
-                        {proxyStatus.localIp}:{proxyStatus.port}
-                      </code>
-                    </p>
-                    <p>
-                      Then download and trust the CA certificate from{" "}
-                      <code className="settings__code">
-                        http://{proxyStatus.localIp}:{proxyStatus.apiPort}
-                        /api/proxy/ca.pem
-                      </code>
-                    </p>
+                    <ol>
+                      <li>
+                        Download certificate:
+                        <code className="settings__code">
+                          http://{proxyStatus.localIp}:{proxyStatus.apiPort}/api/proxy/ca.pem
+                        </code>
+                      </li>
+                      <li>
+                        Push with adb:
+                        <code className="settings__code">
+                          adb push mapy_ca.pem /sdcard/
+                        </code>
+                      </li>
+                      <li>
+                        Install from device settings: Security {">"} Install from storage.
+                      </li>
+                      <li>
+                        Set emulator proxy:
+                        <code className="settings__code">
+                          {proxyStatus.localIp}:{proxyStatus.port}
+                        </code>
+                      </li>
+                    </ol>
                   </div>
-                )}
+                ) : null}
+                {proxyExpanded === "general" && proxyStatus ? (
+                  <div className="settings__proxy-instructions">
+                    <ol>
+                      <li>
+                        Configure client HTTP(S) proxy:
+                        <code className="settings__code">
+                          {proxyStatus.localIp}:{proxyStatus.port}
+                        </code>
+                      </li>
+                      <li>
+                        Install CA certificate from:
+                        <code className="settings__code">
+                          http://{proxyStatus.localIp}:{proxyStatus.apiPort}/api/proxy/ca.pem
+                        </code>
+                      </li>
+                      <li>
+                        Enable certificate trust in the target OS/browser certificate store.
+                      </li>
+                    </ol>
+                  </div>
+                ) : null}
               </div>
             </div>
           )}

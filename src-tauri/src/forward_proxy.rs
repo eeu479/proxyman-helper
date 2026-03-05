@@ -117,6 +117,11 @@ pub async fn run_forward_proxy(
     ca_cert_pem: String,
     ca_key_pem: String,
 ) -> Result<(), String> {
+    let proxy_port = std::env::var("MAPY_PROXY_PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(9090);
+
     let key_pair =
         KeyPair::from_pem(&ca_key_pem).map_err(|e| format!("Failed to parse CA key: {e}"))?;
     let ca_cert = CertificateParams::from_ca_cert_pem(&ca_cert_pem)
@@ -129,7 +134,7 @@ pub async fn run_forward_proxy(
     let handler = MapyProxyHandler { state: app_state };
 
     let proxy = Proxy::builder()
-        .with_addr(SocketAddr::from(([0, 0, 0, 0], 9090)))
+        .with_addr(SocketAddr::from(([0, 0, 0, 0], proxy_port)))
         .with_rustls_client()
         .with_ca(ca)
         .with_http_handler(handler)
@@ -138,5 +143,9 @@ pub async fn run_forward_proxy(
     proxy
         .start()
         .await
-        .map_err(|e| format!("Proxy error: {e}"))
+        .map_err(|e| {
+            format!(
+                "Proxy error on port {proxy_port}: {e} ({e:?}). If the port is already in use, stop the other process or set MAPY_PROXY_PORT."
+            )
+        })
 }
