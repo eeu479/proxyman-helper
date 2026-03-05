@@ -317,6 +317,9 @@ const App = () => {
         {activeView === "debug" ? (
           <DebugPanel
             selectedProfile={selectedProfile}
+            profileBaseUrl={
+              profiles.find((p) => p.name === selectedProfile)?.baseUrl ?? ""
+            }
             onCreateBlockFromLog={openBuilderFromLog}
           />
         ) : activeView === "library" ? (

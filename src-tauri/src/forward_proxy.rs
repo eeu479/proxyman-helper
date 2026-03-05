@@ -32,15 +32,6 @@ impl HttpHandler for MapyProxyHandler {
             Err(_) => return req.into(),
         };
 
-        let source_port = ctx.client_addr.port();
-        let source_app = process_lookup::lookup_process_name(source_port).await;
-        let host = req
-            .headers()
-            .get("host")
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.to_string())
-            .or_else(|| req.uri().host().map(|h| h.to_string()));
-
         let store = store::read_store(&self.state).await;
         let active_profile = self.state.active_profile.lock().await.clone();
 
@@ -48,6 +39,17 @@ impl HttpHandler for MapyProxyHandler {
             matching::find_block_match(&store, active_profile.as_deref(), &axum_method, &path);
 
         if let Some(found) = block_match.as_ref() {
+            // Only do process lookup when we're going to log (block matched); skip on pass-through
+            // so we don't add lsof/ps latency to every request and break page loads.
+            let source_port = ctx.client_addr.port();
+            let source_app = process_lookup::lookup_process_name(source_port).await;
+            let host = req
+                .headers()
+                .get("host")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string())
+                .or_else(|| req.uri().host().map(|h| h.to_string()));
+
             let (axum_response, logged_response) = response::build_block_response(found);
 
             let query = extract_query_params(req.uri());
