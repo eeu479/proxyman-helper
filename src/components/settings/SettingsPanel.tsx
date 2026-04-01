@@ -13,11 +13,13 @@ import {
   getCertDownloadUrl,
   getMobileconfigUrl,
 } from "../../api/proxy";
+import ThemeSettings from "./ThemeSettings";
 
 const SETTINGS_SECTION_KEY = "settingsSection";
 
 type SectionId =
   | "layout"
+  | "theme"
   | "proxy"
   | "profile"
   | "libraries"
@@ -56,10 +58,14 @@ type SettingsPanelProps = {
   onChooseFolder?: () => Promise<string | null>;
   builderLayout?: "tree" | "grid";
   onBuilderLayoutChange?: (layout: "tree" | "grid") => void;
+  theme?: "dark" | "light";
+  setTheme?: (mode: "dark" | "light") => void;
+  onToggleTheme?: () => void;
 };
 
 const SECTIONS: { id: SectionId; label: string }[] = [
   { id: "layout", label: "Layout" },
+  { id: "theme", label: "Theme" },
   { id: "proxy", label: "Proxy" },
   { id: "profile", label: "Profile" },
   { id: "libraries", label: "Libraries" },
@@ -97,6 +103,9 @@ const SettingsPanel = ({
   onChooseFolder,
   builderLayout = "tree",
   onBuilderLayoutChange,
+  theme = "dark",
+  setTheme,
+  onToggleTheme,
 }: SettingsPanelProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [addLibName, setAddLibName] = useState("");
@@ -120,7 +129,11 @@ const SettingsPanel = ({
 
   const sectionsWithAvailability = SECTIONS.map((s) => ({
     ...s,
-    available: s.id === "layout" || s.id === "proxy" || hasProfile,
+    available:
+      s.id === "layout" ||
+      s.id === "theme" ||
+      s.id === "proxy" ||
+      hasProfile,
   }));
 
   const visibleSections = sectionsWithAvailability.filter((s) => s.available);
@@ -233,6 +246,14 @@ const SettingsPanel = ({
         </nav>
 
         <div className="settings__content">
+          {activeSection === "theme" && (
+            <ThemeSettings
+              theme={theme}
+              setTheme={setTheme}
+              onToggleTheme={onToggleTheme}
+            />
+          )}
+
           {activeSection === "layout" && (
             <>
               {onBuilderLayoutChange ? (

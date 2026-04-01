@@ -123,8 +123,14 @@ const DebugPanel = ({
         ? await stopRecording()
         : await startRecording();
       setIsRecording(result.recording);
-    } catch {
+      setErrorMessage("");
+    } catch (error) {
       await refreshRecordingStatus();
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : `Unable to ${isRecording ? "stop" : "start"} recording.`
+      );
     }
   };
 
@@ -466,6 +472,10 @@ const DebugPanel = ({
         </aside>
 
         <div className="debug__main">
+          {!isEmpty && errorMessage ? (
+            <p className="panel__message panel__message--error">{errorMessage}</p>
+          ) : null}
+
           {!isEmpty && (
             <div className="debug__filters">
               <input

@@ -35,6 +35,14 @@ impl HttpHandler for MapyProxyHandler {
         let store = store::read_store(&self.state).await;
         let active_profile = self.state.active_profile.lock().await.clone();
 
+        let query = extract_query_params(req.uri());
+        let host = req
+            .headers()
+            .get("host")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string())
+            .or_else(|| req.uri().host().map(|h| h.to_string()));
+
         let block_match =
             matching::find_block_match(&store, active_profile.as_deref(), &axum_method, &path);
 
@@ -43,16 +51,8 @@ impl HttpHandler for MapyProxyHandler {
             // so we don't add lsof/ps latency to every request and break page loads.
             let source_port = ctx.client_addr.port();
             let source_app = process_lookup::lookup_process_name(source_port).await;
-            let host = req
-                .headers()
-                .get("host")
-                .and_then(|v| v.to_str().ok())
-                .map(|s| s.to_string())
-                .or_else(|| req.uri().host().map(|h| h.to_string()));
 
             let (axum_response, logged_response) = response::build_block_response(found);
-
-            let query = extract_query_params(req.uri());
             logs::record_request(
                 &self.state,
                 &axum_method,
@@ -62,16 +62,32 @@ impl HttpHandler for MapyProxyHandler {
                 Some(found),
                 Some(logged_response),
                 source_app,
-                host,
+                host.clone(),
             )
             .await;
 
             if let Some(r) = axum_to_hudsucker_response(axum_response).await {
                 return r.into();
             }
+
+            // If conversion fails, fall back to pass-through without emitting an extra unmatched log.
+            return req.into();
         }
 
-        // No match — pass through to real server
+        // No match — record as unmatched and pass through to real server.
+        logs::record_request(
+            &self.state,
+            &axum_method,
+            &path,
+            &query,
+            None,
+            None,
+            None,
+            None,
+            host,
+        )
+        .await;
+
         req.into()
     }
 

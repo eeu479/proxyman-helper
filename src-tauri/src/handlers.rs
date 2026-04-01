@@ -866,16 +866,32 @@ pub async fn proxy_handler(
 
 // --- Proxy management handlers ---
 
+fn configured_proxy_port() -> u16 {
+    std::env::var("MAPY_PROXY_PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(9090)
+}
+
+fn configured_api_port() -> u16 {
+    std::env::var("MAPY_PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(3000)
+}
+
 pub async fn proxy_status(State(_state): State<AppState>) -> Json<Value> {
     let local_ip = local_ip_address::local_ip()
         .map(|ip| ip.to_string())
         .unwrap_or_else(|_| "unknown".to_string());
+    let proxy_port = configured_proxy_port();
+    let api_port = configured_api_port();
 
     Json(json!({
         "enabled": true,
-        "port": 9090,
+        "port": proxy_port,
         "localIp": local_ip,
-        "apiPort": 3000,
+        "apiPort": api_port,
     }))
 }
 
@@ -1111,7 +1127,7 @@ pub async fn proxy_install_macos(State(state): State<AppState>) -> Response {
 // --- Recording (system proxy toggle) handlers ---
 
 pub async fn start_recording(State(state): State<AppState>) -> Response {
-    match system_proxy::enable_system_proxy(9090).await {
+    match system_proxy::enable_system_proxy(configured_proxy_port()).await {
         Ok(()) => {
             state
                 .recording

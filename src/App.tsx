@@ -16,6 +16,7 @@ import useBlocks from "./hooks/useBlocks";
 import useProfiles from "./hooks/useProfiles";
 import useSubprofiles from "./hooks/useSubprofiles";
 import type { Block } from "./types/block";
+import { getOverrides, applyOverrides } from "./theme/theme";
 
 const useChooseFolder = () =>
   useCallback(async (): Promise<string | null> => {
@@ -51,6 +52,10 @@ const App = () => {
     document.body.dataset.theme = theme;
     localStorage.setItem("theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    applyOverrides(getOverrides());
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("builderLayout", builderLayout);
@@ -385,6 +390,11 @@ const App = () => {
             onChooseFolder={onChooseFolder}
             builderLayout={builderLayout}
             onBuilderLayoutChange={setBuilderLayout}
+            theme={theme}
+            setTheme={setTheme}
+            onToggleTheme={() =>
+              setTheme((current) => (current === "dark" ? "light" : "dark"))
+            }
           />
         ) : builderLayout === "tree" ? (
           <>
